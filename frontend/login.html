@@ -1,262 +1,237 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Connexion - CDBHS</title>
   <link rel="icon" type="image/png" href="images/billiard-icon.png">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-      position: relative;
-      overflow: hidden;
+      min-height: 100vh;
+      padding: var(--space-lg);
     }
 
-    /* Animated background elements */
-    .bg-decoration {
-      position: absolute;
-      border-radius: 50%;
-      opacity: 0.1;
-      animation: float 20s infinite ease-in-out;
-    }
-
-    .bg-decoration:nth-child(1) {
-      width: 400px;
-      height: 400px;
-      background: #667eea;
-      top: -100px;
-      left: -100px;
-      animation-delay: 0s;
-    }
-
-    .bg-decoration:nth-child(2) {
-      width: 300px;
-      height: 300px;
-      background: #764ba2;
-      bottom: -50px;
-      right: -50px;
-      animation-delay: -5s;
-    }
-
-    .bg-decoration:nth-child(3) {
-      width: 200px;
-      height: 200px;
-      background: #f093fb;
-      top: 50%;
-      right: 10%;
-      animation-delay: -10s;
-    }
-
-    @keyframes float {
-      0%, 100% { transform: translateY(0) rotate(0deg); }
-      50% { transform: translateY(-30px) rotate(10deg); }
-    }
-
-    .login-container {
-      position: relative;
-      z-index: 1;
+    .login-wrapper {
       width: 100%;
-      max-width: 440px;
-      padding: 20px;
+      max-width: 420px;
     }
 
     .login-card {
-      background: rgba(255, 255, 255, 0.95);
-      backdrop-filter: blur(20px);
-      border-radius: 24px;
-      padding: 50px 40px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+      background: var(--surface);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-xl);
+      padding: var(--space-2xl);
+      animation: slideUp 0.5s ease-out;
     }
 
-    .logo-section {
+    .login-header {
       text-align: center;
-      margin-bottom: 40px;
+      margin-bottom: var(--space-xl);
     }
 
-    .logo-icon {
-      width: 100px;
-      height: 100px;
-      margin-bottom: 20px;
-      border-radius: 16px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    .login-logo {
+      width: 88px;
+      height: 88px;
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
+      margin-bottom: var(--space-lg);
     }
 
-    .app-title {
-      font-size: 1.75rem;
+    .login-title {
+      font-size: var(--text-2xl);
       font-weight: 700;
-      color: #1a1a2e;
-      margin-bottom: 8px;
+      color: var(--text-primary);
+      margin-bottom: var(--space-xs);
       letter-spacing: -0.5px;
     }
 
-    .app-subtitle {
-      font-size: 1rem;
-      color: #667eea;
+    .login-subtitle {
+      font-size: var(--text-base);
+      color: var(--primary);
       font-weight: 500;
     }
 
     .season-badge {
-      display: inline-block;
-      margin-top: 15px;
-      padding: 8px 20px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border-radius: 50px;
-      font-size: 0.875rem;
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-xs);
+      margin-top: var(--space-md);
+      padding: var(--space-sm) var(--space-md);
+      background: var(--primary);
+      color: var(--text-inverse);
+      border-radius: var(--radius-full);
+      font-size: var(--text-sm);
       font-weight: 600;
-      letter-spacing: 0.5px;
     }
 
-    .error-message {
-      background: #fee2e2;
-      border: 1px solid #fecaca;
-      color: #dc2626;
-      padding: 12px 16px;
-      border-radius: 12px;
-      margin-bottom: 20px;
-      font-size: 0.875rem;
-      display: none;
+    .login-form {
+      margin-top: var(--space-xl);
     }
 
-    .form-group {
-      margin-bottom: 24px;
-    }
-
-    .form-group label {
-      display: block;
-      font-size: 0.875rem;
-      font-weight: 500;
-      color: #374151;
-      margin-bottom: 8px;
-    }
-
-    .form-group input {
+    .login-btn {
       width: 100%;
-      padding: 14px 18px;
-      font-size: 1rem;
-      border: 2px solid #e5e7eb;
-      border-radius: 12px;
-      transition: all 0.3s ease;
-      background: #f9fafb;
-      font-family: inherit;
+      padding: var(--space-md);
+      font-size: var(--text-base);
+      margin-top: var(--space-sm);
     }
 
-    .form-group input:focus {
-      outline: none;
-      border-color: #667eea;
-      background: white;
-      box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
-    }
-
-    .form-group input::placeholder {
-      color: #9ca3af;
-    }
-
-    .submit-btn {
-      width: 100%;
-      padding: 16px;
-      font-size: 1rem;
-      font-weight: 600;
-      color: white;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border: none;
-      border-radius: 12px;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      font-family: inherit;
-      letter-spacing: 0.5px;
-    }
-
-    .submit-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
-    }
-
-    .submit-btn:active {
-      transform: translateY(0);
-    }
-
-    .footer-text {
+    .login-footer {
       text-align: center;
-      margin-top: 30px;
-      font-size: 0.75rem;
-      color: rgba(255, 255, 255, 0.5);
+      margin-top: var(--space-xl);
+      padding-top: var(--space-lg);
+      border-top: 1px solid var(--border);
     }
 
-    .footer-text a {
-      color: rgba(255, 255, 255, 0.7);
-      text-decoration: none;
+    .login-footer-text {
+      font-size: var(--text-xs);
+      color: var(--text-tertiary);
     }
 
-    /* Responsive */
-    @media (max-width: 480px) {
-      .login-card {
-        padding: 40px 24px;
-        border-radius: 20px;
-      }
+    .theme-toggle-login {
+      position: fixed;
+      top: var(--space-lg);
+      right: var(--space-lg);
+    }
 
-      .app-title {
-        font-size: 1.5rem;
-      }
+    /* Background decoration */
+    .bg-gradient {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      overflow: hidden;
+    }
 
-      .logo-icon {
-        width: 60px;
-        height: 60px;
-      }
+    .bg-gradient::before {
+      content: '';
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      background: var(--primary);
+      opacity: 0.03;
+      border-radius: 50%;
+      top: -200px;
+      right: -200px;
+      animation: float 20s ease-in-out infinite;
+    }
+
+    .bg-gradient::after {
+      content: '';
+      position: absolute;
+      width: 400px;
+      height: 400px;
+      background: var(--primary);
+      opacity: 0.03;
+      border-radius: 50%;
+      bottom: -100px;
+      left: -100px;
+      animation: float 15s ease-in-out infinite reverse;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      50% { transform: translateY(-30px) rotate(5deg); }
+    }
+
+    /* Error message */
+    .login-error {
+      display: none;
+      margin-bottom: var(--space-lg);
     }
   </style>
 </head>
 <body>
-  <!-- Background decorations -->
-  <div class="bg-decoration"></div>
-  <div class="bg-decoration"></div>
-  <div class="bg-decoration"></div>
+  <div class="bg-gradient"></div>
 
-  <div class="login-container">
+  <button class="theme-toggle theme-toggle-login" onclick="toggleTheme()" aria-label="Toggle dark mode">
+    <span class="theme-toggle-icon">🌙</span>
+  </button>
+
+  <div class="login-wrapper">
     <div class="login-card">
-      <div class="logo-section">
-        <img src="images/billiard-icon.png" alt="CDBHS" class="logo-icon" onerror="this.style.display='none';">
-        <h1 class="app-title">CDBHS</h1>
-        <p class="app-subtitle">Joueurs et Compétitions</p>
-        <span class="season-badge">Saison 2025-2026</span>
+      <div class="login-header">
+        <img src="images/billiard-icon.png" alt="CDBHS" class="login-logo" onerror="this.style.display='none';">
+        <h1 class="login-title">CDBHS</h1>
+        <p class="login-subtitle">Joueurs et Compétitions</p>
+        <span class="season-badge">
+          <span>📅</span>
+          Saison 2025-2026
+        </span>
       </div>
 
-      <div id="errorMessage" class="error-message"></div>
+      <div id="errorMessage" class="alert alert-danger login-error">
+        <span class="alert-icon">⚠️</span>
+        <span id="errorText"></span>
+      </div>
 
-      <form id="loginForm">
+      <form id="loginForm" class="login-form">
         <div class="form-group">
-          <label for="username">Nom d'utilisateur</label>
-          <input type="text" id="username" name="username" placeholder="Entrez votre identifiant" required autofocus autocomplete="username">
+          <label class="form-label" for="username">Nom d'utilisateur</label>
+          <input
+            type="text"
+            id="username"
+            name="username"
+            class="form-input"
+            placeholder="Entrez votre identifiant"
+            required
+            autofocus
+            autocomplete="username"
+          >
         </div>
 
         <div class="form-group">
-          <label for="password">Mot de passe</label>
-          <input type="password" id="password" name="password" placeholder="Entrez votre mot de passe" required autocomplete="current-password">
+          <label class="form-label" for="password">Mot de passe</label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            class="form-input"
+            placeholder="Entrez votre mot de passe"
+            required
+            autocomplete="current-password"
+          >
         </div>
 
-        <button type="submit" class="submit-btn">Se connecter</button>
+        <button type="submit" class="btn login-btn">Se connecter</button>
       </form>
-    </div>
 
-    <p class="footer-text">
-      Comité Départemental de Billard des Hauts-de-Seine
-    </p>
+      <div class="login-footer">
+        <p class="login-footer-text">Comité Départemental de Billard des Hauts-de-Seine</p>
+      </div>
+    </div>
   </div>
 
   <script>
     const API_URL = '/api';
+
+    // Theme management
+    function getPreferredTheme() {
+      const stored = localStorage.getItem('theme');
+      if (stored) return stored;
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+
+    function setTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('theme', theme);
+      updateThemeIcon(theme);
+    }
+
+    function updateThemeIcon(theme) {
+      const icon = document.querySelector('.theme-toggle-icon');
+      icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+    }
+
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme');
+      setTheme(current === 'dark' ? 'light' : 'dark');
+    }
+
+    // Initialize theme
+    setTheme(getPreferredTheme());
 
     // Check if already logged in
     const token = localStorage.getItem('token');
@@ -274,13 +249,18 @@
       }).catch(() => {});
     }
 
+    // Form submission
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
 
       const username = document.getElementById('username').value;
       const password = document.getElementById('password').value;
       const errorDiv = document.getElementById('errorMessage');
-      const submitBtn = document.querySelector('.submit-btn');
+      const errorText = document.getElementById('errorText');
+      const submitBtn = document.querySelector('.login-btn');
+
+      // Hide previous error
+      errorDiv.style.display = 'none';
 
       // Disable button during request
       submitBtn.disabled = true;
@@ -303,14 +283,14 @@
           localStorage.setItem('username', data.user.username || username);
           window.location.href = 'dashboard.html';
         } else {
-          errorDiv.textContent = data.error || 'Identifiants incorrects';
-          errorDiv.style.display = 'block';
+          errorText.textContent = data.error || 'Identifiants incorrects';
+          errorDiv.style.display = 'flex';
           submitBtn.disabled = false;
           submitBtn.textContent = 'Se connecter';
         }
       } catch (error) {
-        errorDiv.textContent = 'Erreur de connexion au serveur';
-        errorDiv.style.display = 'block';
+        errorText.textContent = 'Erreur de connexion au serveur';
+        errorDiv.style.display = 'flex';
         submitBtn.disabled = false;
         submitBtn.textContent = 'Se connecter';
       }
