@@ -33,12 +33,22 @@
       margin-bottom: var(--space-xl);
     }
 
+    .login-logos {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: var(--space-lg);
+      margin-bottom: var(--space-lg);
+    }
+
     .login-logo {
-      width: 88px;
-      height: 88px;
+      width: 80px;
+      height: 80px;
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow-md);
-      margin-bottom: var(--space-lg);
+      object-fit: contain;
+      background: white;
+      padding: 4px;
     }
 
     .login-title {
@@ -153,7 +163,10 @@
   <div class="login-wrapper">
     <div class="login-card">
       <div class="login-header">
-        <img src="images/billiard-icon.png" alt="CDBHS" class="login-logo" onerror="this.style.display='none';">
+        <div class="login-logos">
+          <img src="images/billiard-icon.png" alt="CDBHS" class="login-logo" onerror="this.style.display='none';">
+          <img src="images/lbif-logo.jpg" alt="LBIF" class="login-logo" onerror="this.style.display='none';">
+        </div>
         <h1 class="login-title">CDBHS</h1>
         <p class="login-subtitle">Joueurs et Compétitions</p>
         <span class="season-badge">
