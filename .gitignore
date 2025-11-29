@@ -1,0 +1,39 @@
+# Node modules
+node_modules/
+
+# Database files (will be recreated on deploy)
+*.db
+*.db-journal
+
+# Environment variables
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+
+# Uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Large files
+*.mov
+*.mp4
+*.avi
+*.mkv
+*.pdf
+*.xlsx
+*.csv
+*.xls
+
+# Build artifacts
+backend/frontend/

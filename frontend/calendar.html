@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calendrier - Billard Ranking</title>
+  <link rel="icon" type="image/png" href="images/billiard-icon.png">
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    .calendar-viewer {
+      width: 100%;
+      height: calc(100vh - 200px);
+      min-height: 600px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      margin-top: 20px;
+    }
+
+    .download-section {
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .download-section p {
+      font-size: 16px;
+      color: #666;
+      margin-bottom: 20px;
+    }
+
+    .btn-download {
+      display: inline-block;
+      padding: 15px 30px;
+      background: #1F4788;
+      color: white;
+      text-decoration: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      transition: background 0.3s;
+      border: none;
+      cursor: pointer;
+    }
+
+    .btn-download:hover {
+      background: #163763;
+    }
+
+    #calendarContainer {
+      display: none;
+    }
+
+    #downloadContainer {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="navbar">
+      <h2><img src="images/billiard-icon.png" alt="🎱" style="height: 28px; width: 28px; vertical-align: middle; margin-right: 8px;" onerror="this.style.display='none'; this.nextSibling.style.display='inline';"><span style="display:none;">🎱</span> Calendrier Saison</h2>
+      <div class="nav-links">
+        <a href="dashboard.html">Accueil</a>
+        <a href="players-list.html">Joueurs</a>
+        <a href="import-players.html">Import Joueurs</a>
+        <a href="import-tournament.html">Import Tournoi</a>
+        <a href="rankings.html">Classements</a>
+        <a href="calendar.html" class="active">Calendrier</a>
+        <a href="#" id="logoutBtn">Déconnexion</a>
+      </div>
+    </div>
+
+    <!-- No calendar message -->
+    <div class="card" id="noCalendarContainer" style="display: none;">
+      <h3>Calendrier CDBHS 2025-2026</h3>
+      <div class="download-section">
+        <p style="color: #666; font-size: 18px;">Aucun calendrier n'a encore été téléversé.</p>
+        <p style="font-size: 14px; color: #888;">L'administrateur doit téléverser un fichier PDF ou Excel depuis la page Paramètres.</p>
+        <a href="settings.html" class="btn-download" style="text-decoration: none;">
+          Aller aux Paramètres
+        </a>
+      </div>
+    </div>
+
+    <!-- PDF viewer card -->
+    <div class="card" id="calendarContainer" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <h3>Calendrier CDBHS 2025-2026</h3>
+        <button class="btn-download" id="downloadBtnPdf" style="padding: 10px 20px;">
+          📥 Télécharger
+        </button>
+      </div>
+      <iframe id="calendarFrame" class="calendar-viewer"></iframe>
+    </div>
+
+    <!-- Excel download card -->
+    <div class="card" id="downloadContainer" style="display: none;">
+      <h3>Calendrier CDBHS 2025-2026</h3>
+      <div class="download-section">
+        <p>Le calendrier de la saison est disponible au format Excel.</p>
+        <p style="font-size: 14px; color: #888;">Cliquez sur le bouton ci-dessous pour télécharger et ouvrir le fichier dans Excel.</p>
+        <button class="btn-download" id="downloadBtn">
+          📅 Télécharger le Calendrier
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = '/api';
+
+    // Check authentication
+    const token = localStorage.getItem('token');
+    if (!token) {
+      window.location.href = 'login.html';
+    }
+
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      window.location.href = 'login.html';
+    });
+
+    const viewUrl = `${API_URL}/calendar/view`;
+    const downloadUrl = `${API_URL}/calendar/download`;
+
+    // Check what type of calendar file is available
+    async function initializeCalendar() {
+      try {
+        const response = await fetch(viewUrl, {
+          method: 'HEAD',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            // No calendar uploaded yet - show friendly message
+            document.getElementById('noCalendarContainer').style.display = 'block';
+            return;
+          }
+          throw new Error('Calendar not found');
+        }
+
+        const contentType = response.headers.get('Content-Type');
+
+        if (contentType === 'application/pdf') {
+          // Show PDF viewer
+          document.getElementById('calendarContainer').style.display = 'block';
+          document.getElementById('calendarFrame').src = `${viewUrl}?token=${encodeURIComponent(token)}`;
+        } else {
+          // Show download section for Excel
+          document.getElementById('downloadContainer').style.display = 'block';
+        }
+      } catch (error) {
+        console.error('Error initializing calendar:', error);
+        // Show no calendar message on any error
+        document.getElementById('noCalendarContainer').style.display = 'block';
+      }
+    }
+
+    // Download calendar function
+    async function downloadCalendar() {
+      try {
+        const response = await fetch(downloadUrl, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Erreur lors du téléchargement');
+        }
+
+        const contentDisposition = response.headers.get('Content-Disposition');
+        const filenameMatch = contentDisposition && contentDisposition.match(/filename="(.+)"/);
+        const filename = filenameMatch ? filenameMatch[1] : 'Calendrier_CDBHS_2025-2026.xlsx';
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } catch (error) {
+        console.error('Error downloading calendar:', error);
+        alert('Erreur lors du téléchargement du calendrier');
+      }
+    }
+
+    // Event listeners for download buttons
+    document.getElementById('downloadBtn').addEventListener('click', downloadCalendar);
+    document.getElementById('downloadBtnPdf').addEventListener('click', downloadCalendar);
+
+    // Initialize the calendar view
+    initializeCalendar();
+  </script>
+</body>
+</html>

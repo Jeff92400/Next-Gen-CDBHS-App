@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Import Tournoi - Billard Ranking</title>
+  <link rel="icon" type="image/png" href="images/billiard-icon.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="navbar">
+      <h2><img src="images/billiard-icon.png" alt="🎱" style="height: 28px; width: 28px; vertical-align: middle; margin-right: 8px;" onerror="this.style.display='none'; this.nextSibling.style.display='inline';"><span style="display:none;">🎱</span> CDBHS Tournois</h2>
+      <div class="nav-links">
+        <a href="dashboard.html" class="nav-logout" style="background: #667eea !important;">← Accueil</a>
+      </div>
+    </div>
+
+    <div id="errorMessage" class="error" style="display: none;"></div>
+    <div id="successMessage" class="success" style="display: none;"></div>
+
+    <div class="card">
+      <h3>Importer les résultats d'un tournoi</h3>
+      <p style="color: #666; margin-bottom: 20px;">
+        Sélectionnez la catégorie, le numéro du tournoi (1, 2 ou 3) et la saison, puis importez le fichier CSV des résultats.
+      </p>
+
+      <form id="importForm">
+        <div class="form-group">
+          <label for="categorySelect">Catégorie *</label>
+          <select id="categorySelect" required>
+            <option value="">-- Sélectionner une catégorie --</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="tournamentNumber">Numéro du tournoi *</label>
+          <select id="tournamentNumber" required>
+            <option value="">-- Sélectionner --</option>
+            <option value="1">Tournoi 1</option>
+            <option value="2">Tournoi 2</option>
+            <option value="3">Tournoi 3</option>
+            <option value="4">Finale Départementale</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="tournamentDate">Date du tournoi *</label>
+          <input type="date" id="tournamentDate" required>
+        </div>
+
+        <div class="form-group">
+          <label for="season">Saison (calculée automatiquement)</label>
+          <input type="text" id="season" placeholder="Ex: 2024-2025" readonly style="background: #f0f0f0;">
+        </div>
+
+        <div class="file-upload" id="fileUpload">
+          <p>📁 Cliquez pour sélectionner un fichier CSV</p>
+          <p style="font-size: 12px; color: #999; margin-top: 10px;">ou glissez-déposez le fichier ici</p>
+          <input type="file" id="fileInput" accept=".csv" required>
+          <div id="fileName" class="file-name" style="display: none;"></div>
+        </div>
+
+        <button type="submit" class="btn" id="importBtn">Importer le tournoi</button>
+      </form>
+    </div>
+
+    <div class="card" id="resultsCard" style="display: none;">
+      <h3>Résultats de l'import</h3>
+      <div id="importResults"></div>
+    </div>
+
+    <!-- Modal for unknown players -->
+    <div id="unknownPlayersModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+      <div style="background: white; padding: 30px; border-radius: 12px; max-width: 600px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+        <h3 style="margin-top: 0;">⚠️ Joueurs inconnus détectés</h3>
+        <p style="color: #666; margin-bottom: 20px;">Les joueurs suivants n'existent pas dans la base de données. Veuillez sélectionner leur club pour les créer.</p>
+        <div id="unknownPlayersList"></div>
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+          <button id="createPlayersBtn" class="btn" style="flex: 1;">Créer les joueurs et continuer</button>
+          <button id="cancelBtn" class="btn" style="flex: 1; background: #999;">Annuler</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = '/api';
+
+    // Check authentication
+    const token = localStorage.getItem('token');
+    if (!token) {
+      window.location.href = 'login.html';
+    }
+
+    // Check user role - this page is admin only
+    const userRole = localStorage.getItem('userRole');
+    if (userRole !== 'admin') {
+      alert('Accès réservé aux administrateurs');
+      window.location.href = 'dashboard.html';
+    }
+
+
+    // Calculate season from tournament date
+    // September to July determines the season
+    // Example: Oct 2025 → 2025-2026, July 2026 → 2025-2026, Sept 2026 → 2026-2027
+    function calculateSeason(dateString) {
+      const date = new Date(dateString);
+      const month = date.getMonth() + 1; // 1-12
+      const year = date.getFullYear();
+
+      // If month is September (9) or later, season starts this year
+      // If month is before September, season started last year
+      const startYear = month >= 9 ? year : year - 1;
+      const endYear = startYear + 1;
+
+      return `${startYear}-${endYear}`;
+    }
+
+    // Update season when tournament date changes
+    document.getElementById('tournamentDate').addEventListener('change', (e) => {
+      const date = e.target.value;
+      if (date) {
+        const season = calculateSeason(date);
+        document.getElementById('season').value = season;
+      }
+    });
+
+    // Load categories
+    async function loadCategories() {
+      try {
+        const response = await fetch(`${API_URL}/tournaments/categories`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const categories = await response.json();
+          const select = document.getElementById('categorySelect');
+
+          categories.forEach(category => {
+            const option = document.createElement('option');
+            option.value = category.id;
+            option.textContent = category.display_name;
+            select.appendChild(option);
+          });
+        }
+      } catch (error) {
+        console.error('Error loading categories:', error);
+      }
+    }
+
+    // File upload handling
+    const fileUpload = document.getElementById('fileUpload');
+    const fileInput = document.getElementById('fileInput');
+    const fileName = document.getElementById('fileName');
+
+    fileUpload.addEventListener('click', () => {
+      fileInput.click();
+    });
+
+    fileUpload.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      fileUpload.style.background = '#f0f0f0';
+    });
+
+    fileUpload.addEventListener('dragleave', () => {
+      fileUpload.style.background = '';
+    });
+
+    fileUpload.addEventListener('drop', (e) => {
+      e.preventDefault();
+      fileUpload.style.background = '';
+
+      if (e.dataTransfer.files.length > 0) {
+        fileInput.files = e.dataTransfer.files;
+        fileName.textContent = e.dataTransfer.files[0].name;
+        fileName.style.display = 'block';
+      }
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length > 0) {
+        fileName.textContent = fileInput.files[0].name;
+        fileName.style.display = 'block';
+      }
+    });
+
+    // Global variables for import
+    let clubs = [];
+    let unknownPlayers = [];
+    let currentFormData = null;
+
+    // Load clubs for dropdown
+    async function loadClubs() {
+      try {
+        const response = await fetch(`${API_URL}/clubs`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          clubs = await response.json();
+        }
+      } catch (error) {
+        console.error('Error loading clubs:', error);
+      }
+    }
+
+    // Show unknown players modal
+    function showUnknownPlayersModal(players) {
+      unknownPlayers = players;
+      const modal = document.getElementById('unknownPlayersModal');
+      const list = document.getElementById('unknownPlayersList');
+
+      list.innerHTML = players.map((player, index) => `
+        <div style="margin-bottom: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px;">
+          <div style="font-weight: bold; margin-bottom: 8px;">
+            ${player.fullName} (${player.licence})
+          </div>
+          <label style="display: block; margin-bottom: 5px; font-size: 14px; color: #666;">Club *</label>
+          <select id="club_${index}" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            <option value="">-- Sélectionner un club --</option>
+            ${clubs.map(club => `<option value="${club.name}">${club.display_name}</option>`).join('')}
+          </select>
+        </div>
+      `).join('');
+
+      modal.style.display = 'flex';
+    }
+
+    // Hide modal
+    function hideModal() {
+      document.getElementById('unknownPlayersModal').style.display = 'none';
+    }
+
+    // Create players and continue import
+    document.getElementById('createPlayersBtn').addEventListener('click', async () => {
+      const playersToCreate = unknownPlayers.map((player, index) => {
+        const clubSelect = document.getElementById(`club_${index}`);
+        if (!clubSelect.value) {
+          throw new Error(`Veuillez sélectionner un club pour ${player.fullName}`);
+        }
+        return {
+          licence: player.licence,
+          firstName: player.firstName,
+          lastName: player.lastName,
+          club: clubSelect.value
+        };
+      });
+
+      try {
+        // Create players
+        const createResponse = await fetch(`${API_URL}/tournaments/create-players`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ players: playersToCreate })
+        });
+
+        if (!createResponse.ok) {
+          throw new Error('Erreur lors de la création des joueurs');
+        }
+
+        hideModal();
+
+        // Now proceed with the actual import
+        await performImport(currentFormData);
+
+      } catch (error) {
+        alert(error.message || 'Erreur lors de la création des joueurs');
+      }
+    });
+
+    // Cancel button
+    document.getElementById('cancelBtn').addEventListener('click', () => {
+      hideModal();
+      document.getElementById('importBtn').disabled = false;
+      document.getElementById('importBtn').textContent = 'Importer le tournoi';
+    });
+
+    // Perform the actual import
+    async function performImport(formData) {
+      const errorDiv = document.getElementById('errorMessage');
+      const successDiv = document.getElementById('successMessage');
+      const importBtn = document.getElementById('importBtn');
+
+      try {
+        const response = await fetch(`${API_URL}/tournaments/import`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          successDiv.textContent = `Import réussi ! ${data.imported} résultats importés. Les classements ont été recalculés.`;
+          successDiv.style.display = 'block';
+
+          // Show results
+          const resultsCard = document.getElementById('resultsCard');
+          const resultsDiv = document.getElementById('importResults');
+
+          resultsDiv.innerHTML = `
+            <div class="stats-grid">
+              <div class="stat-card">
+                <h4>Résultats importés</h4>
+                <div class="stat-value">${data.imported}</div>
+              </div>
+            </div>
+            <p style="margin-top: 20px;">
+              <a href="rankings.html" class="btn btn-small">Voir les classements mis à jour</a>
+            </p>
+          `;
+
+          if (data.errors && data.errors.length > 0) {
+            resultsDiv.innerHTML += `
+              <div class="error" style="margin-top: 20px;">
+                <strong>Erreurs rencontrées :</strong>
+                <ul style="margin-top: 10px;">
+                  ${data.errors.slice(0, 10).map(err => `<li>${err.licence || err.record}: ${err.error}</li>`).join('')}
+                </ul>
+              </div>
+            `;
+          }
+
+          resultsCard.style.display = 'block';
+
+          // Reset form
+          fileInput.value = '';
+          fileName.style.display = 'none';
+          document.getElementById('importForm').reset();
+        } else {
+          errorDiv.textContent = data.error || 'Erreur lors de l\'import';
+          errorDiv.style.display = 'block';
+        }
+      } catch (error) {
+        errorDiv.textContent = 'Erreur de connexion au serveur';
+        errorDiv.style.display = 'block';
+      } finally {
+        importBtn.disabled = false;
+        importBtn.textContent = 'Importer le tournoi';
+      }
+    }
+
+    // Form submission - validate first, then import
+    document.getElementById('importForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const errorDiv = document.getElementById('errorMessage');
+      const successDiv = document.getElementById('successMessage');
+      const importBtn = document.getElementById('importBtn');
+
+      errorDiv.style.display = 'none';
+      successDiv.style.display = 'none';
+
+      const categoryId = document.getElementById('categorySelect').value;
+      const tournamentNumber = document.getElementById('tournamentNumber').value;
+      const tournamentDate = document.getElementById('tournamentDate').value;
+      const season = document.getElementById('season').value;
+
+      if (!categoryId || !tournamentNumber || !tournamentDate || !season || !fileInput.files[0]) {
+        errorDiv.textContent = 'Veuillez remplir tous les champs';
+        errorDiv.style.display = 'block';
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+      formData.append('categoryId', categoryId);
+      formData.append('tournamentNumber', tournamentNumber);
+      formData.append('tournamentDate', tournamentDate);
+      formData.append('season', season);
+
+      currentFormData = formData;
+
+      importBtn.disabled = true;
+      importBtn.textContent = 'Validation en cours...';
+
+      try {
+        // First validate and check for unknown players
+        const validateResponse = await fetch(`${API_URL}/tournaments/validate`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        });
+
+        const validateData = await validateResponse.json();
+
+        if (!validateResponse.ok) {
+          throw new Error(validateData.error || 'Erreur lors de la validation');
+        }
+
+        if (validateData.status === 'validation_required' && validateData.unknownPlayers.length > 0) {
+          // Show modal for unknown players
+          importBtn.textContent = 'En attente de création des joueurs...';
+          showUnknownPlayersModal(validateData.unknownPlayers);
+        } else {
+          // All players exist, proceed with import
+          importBtn.textContent = 'Import en cours...';
+          await performImport(formData);
+        }
+
+      } catch (error) {
+        errorDiv.textContent = error.message || 'Erreur de connexion au serveur';
+        errorDiv.style.display = 'block';
+        importBtn.disabled = false;
+        importBtn.textContent = 'Importer le tournoi';
+      }
+    });
+
+    // Initialize
+    loadCategories();
+    loadClubs();
+
+    // Set today's date as default value
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('tournamentDate').value = today;
+
+    // Auto-calculate season for today's date
+    const season = calculateSeason(today);
+    document.getElementById('season').value = season;
+  </script>
+</body>
+</html>

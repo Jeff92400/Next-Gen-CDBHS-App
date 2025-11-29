@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Historique Joueur - Billard Ranking</title>
+  <link rel="icon" type="image/png" href="images/billiard-icon.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="navbar">
+      <h2><img src="images/billiard-icon.png" alt="🎱" style="height: 28px; width: 28px; vertical-align: middle; margin-right: 8px;" onerror="this.style.display='none'; this.nextSibling.style.display='inline';"><span style="display:none;">🎱</span> Historique du Joueur</h2>
+      <div class="nav-links">
+        <a href="dashboard.html">Accueil</a>
+        <a href="players-list.html">Joueurs</a>
+        <a href="import-players.html" class="admin-only">Import Joueurs</a>
+        <a href="import-tournament.html" class="admin-only">Import Tournoi</a>
+        <a href="tournaments-list.html">Tournois</a>
+        <a href="rankings.html">Classements</a>
+        <a href="calendar.html">Calendrier</a>
+        <a href="clubs.html">Clubs</a>
+        <a href="settings.html">Parametres</a>
+        <a href="#" id="logoutBtn">Deconnexion</a>
+      </div>
+    </div>
+
+    <div id="errorMessage" class="error" style="display: none;"></div>
+
+    <div id="loadingPlayer" class="loading">
+      <div class="spinner"></div>
+      Chargement...
+    </div>
+
+    <div id="playerContent" style="display: none;">
+      <div class="card">
+        <h3 id="playerName">-</h3>
+        <div style="color: #666;">
+          <p><strong>Licence :</strong> <span id="playerLicence">-</span></p>
+          <p><strong>Club :</strong> <span id="playerClub">-</span></p>
+          <div style="margin-top: 15px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+            <div>
+              <strong>LIBRE:</strong> <span id="rankLibre">-</span>
+            </div>
+            <div>
+              <strong>CADRE:</strong> <span id="rankCadre">-</span>
+            </div>
+            <div>
+              <strong>BANDE:</strong> <span id="rankBande">-</span>
+            </div>
+            <div>
+              <strong>3 BANDES:</strong> <span id="rank3Bandes">-</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Historique des Tournois</h3>
+        <div id="noHistory" style="display: none; text-align: center; padding: 20px; color: #666;">
+          Aucun historique de tournoi disponible pour ce joueur.
+        </div>
+        <div id="historyTable" style="display: none;">
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Saison</th>
+                  <th>Catégorie</th>
+                  <th>Tournoi</th>
+                  <th>Points Match</th>
+                  <th>Moyenne</th>
+                  <th>Série</th>
+                  <th>Total Saison</th>
+                  <th>Classement</th>
+                </tr>
+              </thead>
+              <tbody id="historyBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = '/api';
+
+    // Check authentication
+    const token = localStorage.getItem('token');
+    if (!token) {
+      window.location.href = 'login.html';
+    }
+
+    // Check user role and show/hide admin elements
+    const userRole = localStorage.getItem('userRole');
+    if (userRole === 'admin') {
+      document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
+    } else {
+      document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+    }
+
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('userRole');
+      localStorage.removeItem('username');
+      window.location.href = 'login.html';
+    });
+
+    // Get licence from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const licence = urlParams.get('licence');
+
+    if (!licence) {
+      document.getElementById('loadingPlayer').style.display = 'none';
+      document.getElementById('errorMessage').textContent = 'Aucune licence spécifiée';
+      document.getElementById('errorMessage').style.display = 'block';
+    } else {
+      loadPlayerData();
+    }
+
+    async function loadPlayerData() {
+      try {
+        console.log('Loading player data for licence:', licence);
+
+        // Load player info
+        const playerResponse = await fetch(`${API_URL}/players/${licence}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        console.log('Player response status:', playerResponse.status);
+
+        if (!playerResponse.ok) {
+          throw new Error('Player not found');
+        }
+
+        const player = await playerResponse.json();
+
+        // Display player info
+        document.getElementById('playerName').textContent = `${player.first_name} ${player.last_name}`;
+        document.getElementById('playerLicence').textContent = player.licence;
+        document.getElementById('playerClub').textContent = player.club || 'N/A';
+        document.getElementById('rankLibre').textContent = player.rank_libre || 'NC';
+        document.getElementById('rankCadre').textContent = player.rank_cadre || 'NC';
+        document.getElementById('rankBande').textContent = player.rank_bande || 'NC';
+        document.getElementById('rank3Bandes').textContent = player.rank_3bandes || 'NC';
+
+        // Load player history
+        console.log('Loading player history for licence:', licence);
+        const historyResponse = await fetch(`${API_URL}/players/${licence}/history`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        console.log('History response status:', historyResponse.status);
+
+        if (historyResponse.ok) {
+          const history = await historyResponse.json();
+
+          if (history.length === 0) {
+            document.getElementById('noHistory').style.display = 'block';
+          } else {
+            const tbody = document.getElementById('historyBody');
+            tbody.innerHTML = '';
+
+            history.forEach(record => {
+              const row = document.createElement('tr');
+              row.innerHTML = `
+                <td>${record.season}</td>
+                <td>${record.display_name}</td>
+                <td style="text-align: center;">T${record.tournament_number}</td>
+                <td style="text-align: center; font-weight: bold;">${record.match_points}</td>
+                <td style="text-align: center;">${record.moyenne.toFixed(3)}</td>
+                <td style="text-align: center;">${record.serie}</td>
+                <td style="text-align: center; font-weight: bold;">${record.total_match_points || '-'}</td>
+                <td style="text-align: center;">
+                  ${record.rank_position ? `#${record.rank_position}` : '-'}
+                </td>
+              `;
+              tbody.appendChild(row);
+            });
+
+            document.getElementById('historyTable').style.display = 'block';
+          }
+        }
+
+        document.getElementById('loadingPlayer').style.display = 'none';
+        document.getElementById('playerContent').style.display = 'block';
+
+      } catch (error) {
+        console.error('Error loading player data:', error);
+        console.error('Error details:', error.message);
+        document.getElementById('loadingPlayer').style.display = 'none';
+        document.getElementById('errorMessage').textContent = `Erreur lors du chargement des données du joueur: ${error.message}`;
+        document.getElementById('errorMessage').style.display = 'block';
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connexion - CDBHS Tournois</title>
+  <link rel="icon" type="image/png" href="images/billiard-icon.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="container login-container">
+    <div class="header">
+      <h1><img src="images/billiard-icon.png" alt="" style="height: 40px; width: 40px; vertical-align: middle; margin-right: 10px;" onerror="this.style.display='none'; this.nextSibling.style.display='inline';">
+<span style="display:none;"></span> CDBHS Tournois</h1>
+      <p>Gestion des Compétitions de Billard</p>
+    </div>
+
+    <div id="errorMessage" class="error" style="display: none;"></div>
+
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="username">Nom d'utilisateur</label>
+        <input type="text" id="username" name="username" required autofocus autocomplete="username">
+      </div>
+
+      <div class="form-group">
+        <label for="password">Mot de passe</label>
+        <input type="password" id="password" name="password" required autocomplete="current-password">
+      </div>
+
+      <button type="submit" class="btn">Se connecter</button>
+    </form>
+  </div>
+
+  <script>
+    const API_URL = '/api';
+
+    // Check if already logged in
+    const token = localStorage.getItem('token');
+    if (token) {
+      // Verify token is still valid
+      fetch(`${API_URL}/auth/me`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }).then(res => {
+        if (res.ok) {
+          window.location.href = 'dashboard.html';
+        } else {
+          localStorage.removeItem('token');
+          localStorage.removeItem('userRole');
+          localStorage.removeItem('username');
+        }
+      }).catch(() => {});
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const errorDiv = document.getElementById('errorMessage');
+
+      try {
+        const response = await fetch(`${API_URL}/auth/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ username, password })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('userRole', data.user.role);
+          localStorage.setItem('username', data.user.username || username);
+          window.location.href = 'dashboard.html';
+        } else {
+          errorDiv.textContent = data.error || 'Erreur de connexion';
+          errorDiv.style.display = 'block';
+        }
+      } catch (error) {
+        errorDiv.textContent = 'Erreur de connexion au serveur';
+        errorDiv.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "billard-ranking-app",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "cd backend && npm install",
+    "start": "cd backend && node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

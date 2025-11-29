@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paramètres - Billard Ranking</title>
+  <link rel="icon" type="image/png" href="images/billiard-icon.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="navbar">
+      <h2><img src="images/billiard-icon.png" alt="🎱" style="height: 28px; width: 28px; vertical-align: middle; margin-right: 8px;" onerror="this.style.display='none'; this.nextSibling.style.display='inline';"><span style="display:none;">🎱</span> Paramètres</h2>
+      <div class="nav-links">
+        <a href="dashboard.html" class="btn" style="background: #1F4788; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; margin-right: 10px;">← Accueil</a>
+        <a href="#" id="logoutBtn" class="btn" style="background: #dc3545; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none;">Déconnexion</a>
+      </div>
+    </div>
+
+    <div id="errorMessage" class="error" style="display: none;"></div>
+    <div id="successMessage" class="success" style="display: none;"></div>
+
+    <div class="card">
+      <h3>Changer le mot de passe administrateur</h3>
+      <form id="changePasswordForm">
+        <div class="form-group">
+          <label for="oldPassword">Mot de passe actuel :</label>
+          <input type="password" id="oldPassword" required minlength="6">
+        </div>
+        <div class="form-group">
+          <label for="newPassword">Nouveau mot de passe :</label>
+          <input type="password" id="newPassword" required minlength="6">
+        </div>
+        <div class="form-group">
+          <label for="confirmPassword">Confirmer le nouveau mot de passe :</label>
+          <input type="password" id="confirmPassword" required minlength="6">
+        </div>
+        <button type="submit" class="btn btn-primary">Changer le mot de passe</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>Calendrier de la saison</h3>
+      <p style="margin-bottom: 20px; color: #666;">Téléversez le calendrier de la saison (PDF ou Excel) pour le rendre accessible à tous les utilisateurs.</p>
+
+      <div id="currentCalendarInfo" style="display: none; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-left: 4px solid #28a745; border-radius: 4px;">
+        <strong>Calendrier actuel :</strong>
+        <div id="calendarDetails" style="margin-top: 8px; color: #666;"></div>
+      </div>
+
+      <form id="calendarUploadForm" style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
+        <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom: 0;">
+          <label for="calendarFile">Fichier calendrier (PDF ou Excel) :</label>
+          <input type="file" id="calendarFile" accept=".pdf,.xlsx,.xls" required style="padding: 10px; border: 1px solid #ddd; border-radius: 4px; width: 100%;">
+        </div>
+        <button type="submit" class="btn btn-primary" id="uploadCalendarBtn" style="padding: 12px 25px;">
+          Téléverser
+        </button>
+      </form>
+
+      <div id="calendarUploadStatus" style="display: none; margin-top: 15px; padding: 10px; border-radius: 4px;"></div>
+    </div>
+
+    <div class="card">
+      <h3>Sauvegardes et Exports</h3>
+      <p style="margin-bottom: 20px; color: #666;">Exportez vos données au format Excel pour créer des sauvegardes locales.</p>
+
+      <div id="lastExportInfo" style="display: none; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-left: 4px solid #28a745; border-radius: 4px;">
+        <strong>📅 Dernier export :</strong>
+        <div id="lastExportDetails" style="margin-top: 8px; color: #666;"></div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+        <button onclick="exportData('players')" class="btn" style="background: #28a745;">
+          👥 Exporter les Joueurs
+        </button>
+        <button onclick="exportData('tournaments')" class="btn" style="background: #17a2b8;">
+          🏆 Exporter les Tournois
+        </button>
+        <button onclick="exportData('rankings')" class="btn" style="background: #ffc107; color: #000;">
+          📊 Exporter les Classements
+        </button>
+        <button onclick="exportData('all')" class="btn" style="background: #dc3545;">
+          💾 Sauvegarde Complète
+        </button>
+      </div>
+
+      <div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border-left: 4px solid #1F4788; border-radius: 4px;">
+        <strong>ℹ️ Information :</strong>
+        <ul style="margin: 10px 0 0 20px; color: #666;">
+          <li>Les exports incluent toutes les données actuelles de la base de données PostgreSQL</li>
+          <li>Les fichiers sont téléchargés au format Excel (.xlsx)</li>
+          <li><strong>Important :</strong> Ces exports sont votre méthode principale de sauvegarde</li>
+          <li>Recommandé : effectuez une sauvegarde complète après chaque tournoi</li>
+          <li>Conservez vos fichiers de sauvegarde dans un endroit sûr (OneDrive, etc.)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = '/api';
+
+    // Check authentication
+    const token = localStorage.getItem('token');
+    if (!token) {
+      window.location.href = 'login.html';
+    }
+
+    // Load and display last export info
+    function displayLastExport() {
+      const lastExport = localStorage.getItem('lastExport');
+      if (lastExport) {
+        try {
+          const exportData = JSON.parse(lastExport);
+          const date = new Date(exportData.timestamp);
+          const formattedDate = date.toLocaleDateString('fr-FR', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          });
+          const formattedTime = date.toLocaleTimeString('fr-FR', {
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+
+          const typeLabels = {
+            'players': 'Joueurs',
+            'tournaments': 'Tournois',
+            'rankings': 'Classements',
+            'all': 'Sauvegarde Complète'
+          };
+
+          document.getElementById('lastExportDetails').innerHTML = `
+            <strong>${typeLabels[exportData.type]}</strong><br>
+            ${formattedDate} à ${formattedTime}
+          `;
+          document.getElementById('lastExportInfo').style.display = 'block';
+        } catch (e) {
+          console.error('Error parsing last export data:', e);
+        }
+      }
+    }
+
+    // Display on page load
+    displayLastExport();
+
+    // Load current calendar info
+    async function loadCalendarInfo() {
+      try {
+        const response = await fetch(`${API_URL}/calendar/info`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.exists) {
+            const uploadDate = new Date(data.uploadedAt);
+            const formattedDate = uploadDate.toLocaleDateString('fr-FR', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
+            });
+            const formattedTime = uploadDate.toLocaleTimeString('fr-FR', {
+              hour: '2-digit',
+              minute: '2-digit'
+            });
+
+            document.getElementById('calendarDetails').innerHTML = `
+              <strong>${data.filename}</strong><br>
+              Téléversé le ${formattedDate} à ${formattedTime}<br>
+              Par: ${data.uploadedBy || 'admin'}
+            `;
+            document.getElementById('currentCalendarInfo').style.display = 'block';
+          }
+        }
+      } catch (error) {
+        console.error('Error loading calendar info:', error);
+      }
+    }
+
+    // Load calendar info on page load
+    loadCalendarInfo();
+
+    // Calendar upload form
+    document.getElementById('calendarUploadForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const fileInput = document.getElementById('calendarFile');
+      const file = fileInput.files[0];
+      const statusDiv = document.getElementById('calendarUploadStatus');
+      const uploadBtn = document.getElementById('uploadCalendarBtn');
+
+      if (!file) {
+        statusDiv.textContent = 'Veuillez sélectionner un fichier';
+        statusDiv.style.background = '#f8d7da';
+        statusDiv.style.color = '#721c24';
+        statusDiv.style.display = 'block';
+        return;
+      }
+
+      // Show loading state
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = 'Téléversement...';
+      statusDiv.textContent = 'Téléversement en cours...';
+      statusDiv.style.background = '#cce5ff';
+      statusDiv.style.color = '#004085';
+      statusDiv.style.display = 'block';
+
+      try {
+        const formData = new FormData();
+        formData.append('calendar', file);
+
+        const response = await fetch(`${API_URL}/calendar/upload`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Erreur lors du téléversement');
+        }
+
+        // Success
+        statusDiv.textContent = `Calendrier "${data.filename}" téléversé avec succès !`;
+        statusDiv.style.background = '#d4edda';
+        statusDiv.style.color = '#155724';
+
+        // Reset form and reload info
+        fileInput.value = '';
+        loadCalendarInfo();
+
+      } catch (error) {
+        console.error('Error uploading calendar:', error);
+        statusDiv.textContent = error.message;
+        statusDiv.style.background = '#f8d7da';
+        statusDiv.style.color = '#721c24';
+      } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = 'Téléverser';
+      }
+    });
+
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      window.location.href = 'login.html';
+    });
+
+    // Change password form
+    document.getElementById('changePasswordForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const oldPassword = document.getElementById('oldPassword').value;
+      const newPassword = document.getElementById('newPassword').value;
+      const confirmPassword = document.getElementById('confirmPassword').value;
+
+      // Hide previous messages
+      document.getElementById('errorMessage').style.display = 'none';
+      document.getElementById('successMessage').style.display = 'none';
+
+      // Validate new password
+      if (newPassword.length < 6) {
+        document.getElementById('errorMessage').textContent = 'Le nouveau mot de passe doit contenir au moins 6 caractères';
+        document.getElementById('errorMessage').style.display = 'block';
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        document.getElementById('errorMessage').textContent = 'Les nouveaux mots de passe ne correspondent pas';
+        document.getElementById('errorMessage').style.display = 'block';
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_URL}/auth/change-password`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            oldPassword,
+            newPassword
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Erreur lors du changement de mot de passe');
+        }
+
+        // Success
+        document.getElementById('successMessage').textContent = 'Mot de passe changé avec succès !';
+        document.getElementById('successMessage').style.display = 'block';
+
+        // Clear form
+        document.getElementById('changePasswordForm').reset();
+
+      } catch (error) {
+        console.error('Error changing password:', error);
+        document.getElementById('errorMessage').textContent = error.message;
+        document.getElementById('errorMessage').style.display = 'block';
+      }
+    });
+
+    // Export data function
+    async function exportData(type) {
+      const endpoints = {
+        'players': '/backup/export-players',
+        'tournaments': '/backup/export-tournaments',
+        'rankings': '/backup/export-rankings',
+        'all': '/backup/export-all'
+      };
+
+      const labels = {
+        'players': 'Joueurs',
+        'tournaments': 'Tournois',
+        'rankings': 'Classements',
+        'all': 'Sauvegarde Complète'
+      };
+
+      try {
+        // Hide previous messages
+        document.getElementById('errorMessage').style.display = 'none';
+        document.getElementById('successMessage').style.display = 'none';
+
+        // Show loading message
+        document.getElementById('successMessage').textContent = `Export ${labels[type]} en cours...`;
+        document.getElementById('successMessage').style.display = 'block';
+
+        const response = await fetch(`${API_URL}${endpoints[type]}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          // Try to parse JSON error, but handle HTML responses too
+          let errorMessage = 'Erreur lors de l\'export';
+          try {
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+              const data = await response.json();
+              errorMessage = data.error || errorMessage;
+            }
+          } catch (e) {
+            // Ignore JSON parse errors for HTML responses
+          }
+          throw new Error(errorMessage);
+        }
+
+        // Get filename from Content-Disposition header
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = `Export_${type}_${new Date().toISOString().split('T')[0]}.xlsx`;
+        if (contentDisposition) {
+          const matches = /filename="([^"]+)"/.exec(contentDisposition);
+          if (matches && matches[1]) {
+            filename = matches[1];
+          }
+        }
+
+        // Create blob and trigger download
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        // Show success message
+        document.getElementById('successMessage').textContent = `Export ${labels[type]} réussi ! Le fichier a été téléchargé.`;
+
+        // Save last export info
+        localStorage.setItem('lastExport', JSON.stringify({
+          type: type,
+          timestamp: new Date().toISOString()
+        }));
+
+        // Update display
+        displayLastExport();
+
+      } catch (error) {
+        console.error('Error exporting data:', error);
+        document.getElementById('successMessage').style.display = 'none';
+        document.getElementById('errorMessage').textContent = error.message;
+        document.getElementById('errorMessage').style.display = 'block';
+      }
+    }
+  </script>
+</body>
+</html>

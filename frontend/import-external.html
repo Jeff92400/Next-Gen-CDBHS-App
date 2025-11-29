@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Import Données Externes - CDBHS</title>
+  <link rel="icon" type="image/png" href="images/billiard-icon.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="navbar">
+      <h2><img src="images/billiard-icon.png" alt="🎱" style="height: 28px; width: 28px; vertical-align: middle; margin-right: 8px;" onerror="this.style.display='none'; this.nextSibling.style.display='inline';"><span style="display:none;">🎱</span> CDBHS Tournois</h2>
+      <div class="nav-links">
+        <a href="generate-poules.html" class="btn" style="background: #28a745; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; margin-right: 10px;">Tournois à jouer →</a>
+        <a href="dashboard.html" class="nav-logout" style="background: #667eea !important;">← Accueil</a>
+      </div>
+    </div>
+
+    <div id="errorMessage" class="error" style="display: none;"></div>
+    <div id="successMessage" class="success" style="display: none;"></div>
+
+    <div class="card">
+      <h3>1. Importer les Tournois Externes</h3>
+      <p style="color: #666; margin-bottom: 20px;">
+        Importez le fichier CSV des tournois depuis la base CDBHS externe.
+        <br><small>Colonnes attendues: TOURNOI_ID, NOM, MODE, CATEGORIE, TAILLE, DEBUT, FIN, GRAND_COIN, TAILLE_CADRE, LIEU</small>
+      </p>
+
+      <form id="importTournoiForm">
+        <div class="file-upload" id="tournoiFileUpload">
+          <p>📁 Cliquez pour sélectionner un fichier CSV (Tournois)</p>
+          <p style="font-size: 12px; color: #999; margin-top: 10px;">ou glissez-déposez le fichier ici</p>
+          <input type="file" id="tournoiFileInput" accept=".csv" required>
+          <div id="tournoiFileName" class="file-name" style="display: none;"></div>
+        </div>
+
+        <button type="submit" class="btn" id="importTournoiBtn">Importer les Tournois</button>
+      </form>
+
+      <div id="tournoiStats" style="margin-top: 15px; padding: 10px; background: #f5f5f5; border-radius: 4px; display: none;">
+        <strong>Tournois importés:</strong> <span id="tournoiCount">0</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>2. Importer les Inscriptions</h3>
+      <p style="color: #666; margin-bottom: 20px;">
+        Importez le fichier CSV des inscriptions joueurs aux tournois.
+        <br><small>Colonnes attendues: INSCRIPTION_ID, JOUEUR_ID, TOURNOI_ID, TIMESTAMP, EMAIL, TELEPHONE, LICENCE, CONVOQUE, FORFAIT, COMMENTAIRE</small>
+      </p>
+
+      <form id="importInscriptionForm">
+        <div class="file-upload" id="inscriptionFileUpload">
+          <p>📁 Cliquez pour sélectionner un fichier CSV (Inscriptions)</p>
+          <p style="font-size: 12px; color: #999; margin-top: 10px;">ou glissez-déposez le fichier ici</p>
+          <input type="file" id="inscriptionFileInput" accept=".csv" required>
+          <div id="inscriptionFileName" class="file-name" style="display: none;"></div>
+        </div>
+
+        <button type="submit" class="btn" id="importInscriptionBtn">Importer les Inscriptions</button>
+      </form>
+
+      <div id="inscriptionStats" style="margin-top: 15px; padding: 10px; background: #f5f5f5; border-radius: 4px; display: none;">
+        <strong>Inscriptions importées:</strong> <span id="inscriptionCount">0</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Données actuelles</h3>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <h4>Tournois Externes</h4>
+          <div class="stat-value" id="currentTournoiCount">-</div>
+        </div>
+        <div class="stat-card">
+          <h4>Inscriptions</h4>
+          <div class="stat-value" id="currentInscriptionCount">-</div>
+        </div>
+      </div>
+
+      <div style="margin-top: 20px; display: flex; gap: 10px;">
+        <button class="btn btn-danger" id="clearTournoiBtn" style="background: #dc3545;">Supprimer tous les tournois</button>
+        <button class="btn btn-danger" id="clearInscriptionBtn" style="background: #dc3545;">Supprimer toutes les inscriptions</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = '/api';
+
+    // Check authentication
+    const token = localStorage.getItem('token');
+    if (!token) {
+      window.location.href = 'login.html';
+    }
+
+    // This page is accessible to all authenticated users (admin and viewer)
+    // to allow updating inscriptions before generating poules
+    const userRole = localStorage.getItem('userRole');
+
+
+    // File upload handling helper
+    function setupFileUpload(uploadEl, inputEl, fileNameEl) {
+      uploadEl.addEventListener('click', () => inputEl.click());
+
+      uploadEl.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadEl.style.background = '#f0f0f0';
+      });
+
+      uploadEl.addEventListener('dragleave', () => {
+        uploadEl.style.background = '';
+      });
+
+      uploadEl.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadEl.style.background = '';
+        if (e.dataTransfer.files.length > 0) {
+          inputEl.files = e.dataTransfer.files;
+          fileNameEl.textContent = e.dataTransfer.files[0].name;
+          fileNameEl.style.display = 'block';
+        }
+      });
+
+      inputEl.addEventListener('change', () => {
+        if (inputEl.files.length > 0) {
+          fileNameEl.textContent = inputEl.files[0].name;
+          fileNameEl.style.display = 'block';
+        }
+      });
+    }
+
+    // Setup file uploads
+    setupFileUpload(
+      document.getElementById('tournoiFileUpload'),
+      document.getElementById('tournoiFileInput'),
+      document.getElementById('tournoiFileName')
+    );
+
+    setupFileUpload(
+      document.getElementById('inscriptionFileUpload'),
+      document.getElementById('inscriptionFileInput'),
+      document.getElementById('inscriptionFileName')
+    );
+
+    // Load current stats
+    async function loadStats() {
+      try {
+        const tournoiRes = await fetch(`${API_URL}/inscriptions/tournoi`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (tournoiRes.ok) {
+          const tournois = await tournoiRes.json();
+          document.getElementById('currentTournoiCount').textContent = tournois.length;
+        }
+
+        const inscriptionRes = await fetch(`${API_URL}/inscriptions`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (inscriptionRes.ok) {
+          const inscriptions = await inscriptionRes.json();
+          document.getElementById('currentInscriptionCount').textContent = inscriptions.length;
+        }
+      } catch (error) {
+        console.error('Error loading stats:', error);
+      }
+    }
+
+    loadStats();
+
+    // Import Tournois
+    document.getElementById('importTournoiForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const errorDiv = document.getElementById('errorMessage');
+      const successDiv = document.getElementById('successMessage');
+      const importBtn = document.getElementById('importTournoiBtn');
+      const fileInput = document.getElementById('tournoiFileInput');
+
+      errorDiv.style.display = 'none';
+      successDiv.style.display = 'none';
+
+      if (!fileInput.files[0]) {
+        errorDiv.textContent = 'Veuillez sélectionner un fichier';
+        errorDiv.style.display = 'block';
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+
+      importBtn.disabled = true;
+      importBtn.textContent = 'Import en cours...';
+
+      try {
+        const response = await fetch(`${API_URL}/inscriptions/tournoi/import`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          successDiv.textContent = `Import réussi ! ${data.imported} tournois importés.`;
+          successDiv.style.display = 'block';
+          document.getElementById('tournoiStats').style.display = 'block';
+          document.getElementById('tournoiCount').textContent = data.imported;
+          loadStats();
+
+          // Reset form
+          fileInput.value = '';
+          document.getElementById('tournoiFileName').style.display = 'none';
+        } else {
+          errorDiv.textContent = data.error || 'Erreur lors de l\'import';
+          errorDiv.style.display = 'block';
+        }
+      } catch (error) {
+        errorDiv.textContent = 'Erreur de connexion au serveur';
+        errorDiv.style.display = 'block';
+      } finally {
+        importBtn.disabled = false;
+        importBtn.textContent = 'Importer les Tournois';
+      }
+    });
+
+    // Import Inscriptions
+    document.getElementById('importInscriptionForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const errorDiv = document.getElementById('errorMessage');
+      const successDiv = document.getElementById('successMessage');
+      const importBtn = document.getElementById('importInscriptionBtn');
+      const fileInput = document.getElementById('inscriptionFileInput');
+
+      errorDiv.style.display = 'none';
+      successDiv.style.display = 'none';
+
+      if (!fileInput.files[0]) {
+        errorDiv.textContent = 'Veuillez sélectionner un fichier';
+        errorDiv.style.display = 'block';
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+
+      importBtn.disabled = true;
+      importBtn.textContent = 'Import en cours...';
+
+      try {
+        const response = await fetch(`${API_URL}/inscriptions/import`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          successDiv.textContent = `Import réussi ! ${data.imported} inscriptions importées.`;
+          successDiv.style.display = 'block';
+          document.getElementById('inscriptionStats').style.display = 'block';
+          document.getElementById('inscriptionCount').textContent = data.imported;
+          loadStats();
+
+          // Reset form
+          fileInput.value = '';
+          document.getElementById('inscriptionFileName').style.display = 'none';
+        } else {
+          errorDiv.textContent = data.error || 'Erreur lors de l\'import';
+          errorDiv.style.display = 'block';
+        }
+      } catch (error) {
+        errorDiv.textContent = 'Erreur de connexion au serveur';
+        errorDiv.style.display = 'block';
+      } finally {
+        importBtn.disabled = false;
+        importBtn.textContent = 'Importer les Inscriptions';
+      }
+    });
+
+    // Clear buttons
+    document.getElementById('clearTournoiBtn').addEventListener('click', async () => {
+      if (!confirm('Êtes-vous sûr de vouloir supprimer tous les tournois externes ?')) return;
+
+      try {
+        const response = await fetch(`${API_URL}/inscriptions/tournoi/all`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          alert(`${data.deleted} tournois supprimés`);
+          loadStats();
+        }
+      } catch (error) {
+        alert('Erreur lors de la suppression');
+      }
+    });
+
+    document.getElementById('clearInscriptionBtn').addEventListener('click', async () => {
+      if (!confirm('Êtes-vous sûr de vouloir supprimer toutes les inscriptions ?')) return;
+
+      try {
+        const response = await fetch(`${API_URL}/inscriptions/all`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          alert(`${data.deleted} inscriptions supprimées`);
+          loadStats();
+        }
+      } catch (error) {
+        alert('Erreur lors de la suppression');
+      }
+    });
+  </script>
+</body>
+</html>

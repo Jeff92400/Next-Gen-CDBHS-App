@@ -1,0 +1,372 @@
+const { Pool } = require('pg');
+const bcrypt = require('bcrypt');
+
+// PostgreSQL connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+});
+
+// Test connection
+pool.connect((err, client, release) => {
+  if (err) {
+    console.error('Error connecting to PostgreSQL:', err.message);
+  } else {
+    console.log('Connected to PostgreSQL database');
+    release();
+    initializeDatabase();
+  }
+});
+
+// Initialize database schema
+async function initializeDatabase() {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // Admin table (legacy - kept for backwards compatibility)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS admin (
+        id SERIAL PRIMARY KEY,
+        password_hash TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Users table with roles
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'viewer',
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_login TIMESTAMP
+      )
+    `);
+
+    // Players table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS players (
+        licence TEXT PRIMARY KEY,
+        club TEXT,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        rank_libre TEXT,
+        rank_cadre TEXT,
+        rank_bande TEXT,
+        rank_3bandes TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Categories table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS categories (
+        id SERIAL PRIMARY KEY,
+        game_type TEXT NOT NULL,
+        level TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        UNIQUE(game_type, level)
+      )
+    `);
+
+    // Tournaments table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tournaments (
+        id SERIAL PRIMARY KEY,
+        category_id INTEGER NOT NULL REFERENCES categories(id),
+        tournament_number INTEGER NOT NULL,
+        season TEXT NOT NULL,
+        import_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        tournament_date TIMESTAMP,
+        UNIQUE(category_id, tournament_number, season)
+      )
+    `);
+
+    // Tournament results table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tournament_results (
+        id SERIAL PRIMARY KEY,
+        tournament_id INTEGER NOT NULL REFERENCES tournaments(id),
+        licence TEXT NOT NULL REFERENCES players(licence),
+        player_name TEXT,
+        match_points INTEGER DEFAULT 0,
+        moyenne REAL DEFAULT 0,
+        serie INTEGER DEFAULT 0,
+        points INTEGER DEFAULT 0,
+        reprises INTEGER DEFAULT 0,
+        UNIQUE(tournament_id, licence)
+      )
+    `);
+
+    // Rankings table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS rankings (
+        id SERIAL PRIMARY KEY,
+        category_id INTEGER NOT NULL REFERENCES categories(id),
+        season TEXT NOT NULL,
+        licence TEXT NOT NULL REFERENCES players(licence),
+        total_match_points INTEGER DEFAULT 0,
+        avg_moyenne REAL DEFAULT 0,
+        best_serie INTEGER DEFAULT 0,
+        rank_position INTEGER,
+        tournament_1_points INTEGER DEFAULT 0,
+        tournament_2_points INTEGER DEFAULT 0,
+        tournament_3_points INTEGER DEFAULT 0,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(category_id, season, licence)
+      )
+    `);
+
+    // Clubs table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS clubs (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        display_name TEXT NOT NULL,
+        logo_filename TEXT,
+        street TEXT,
+        city TEXT,
+        zip_code TEXT,
+        phone TEXT,
+        email TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Add new columns to clubs if they don't exist (migration)
+    const clubColumns = ['street', 'city', 'zip_code', 'phone', 'email'];
+    for (const col of clubColumns) {
+      try {
+        await client.query(`ALTER TABLE clubs ADD COLUMN IF NOT EXISTS ${col} TEXT`);
+      } catch (e) {
+        // Column might already exist
+      }
+    }
+
+    // External tournament definitions table (from CDBHS external DB)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tournoi_ext (
+        tournoi_id INTEGER PRIMARY KEY,
+        nom TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        categorie TEXT NOT NULL,
+        taille INTEGER,
+        debut DATE,
+        fin DATE,
+        grand_coin INTEGER DEFAULT 0,
+        taille_cadre TEXT,
+        lieu TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Player inscriptions table (from CDBHS external DB)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS inscriptions (
+        inscription_id INTEGER PRIMARY KEY,
+        joueur_id INTEGER,
+        tournoi_id INTEGER REFERENCES tournoi_ext(tournoi_id),
+        timestamp TIMESTAMP NOT NULL,
+        email TEXT,
+        telephone TEXT,
+        licence TEXT,
+        convoque INTEGER DEFAULT 0,
+        forfait INTEGER DEFAULT 0,
+        commentaire TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Calendar storage table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS calendar (
+        id SERIAL PRIMARY KEY,
+        filename TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        file_data BYTEA NOT NULL,
+        uploaded_by TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query('COMMIT');
+
+    // Initialize default admin (legacy)
+    const adminResult = await client.query('SELECT COUNT(*) as count FROM admin');
+    if (adminResult.rows[0].count == 0) {
+      const defaultPassword = 'admin123';
+      const hash = await bcrypt.hash(defaultPassword, 10);
+      await client.query('INSERT INTO admin (password_hash) VALUES ($1)', [hash]);
+      console.log('Default admin password created: admin123');
+      console.log('Please change it after first login!');
+    }
+
+    // Initialize default admin user in users table
+    const usersResult = await client.query('SELECT COUNT(*) as count FROM users');
+    if (usersResult.rows[0].count == 0) {
+      const defaultPassword = 'admin123';
+      const hash = await bcrypt.hash(defaultPassword, 10);
+      await client.query(
+        'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)',
+        ['admin', hash, 'admin']
+      );
+      console.log('Default admin user created: username=admin, password=admin123');
+      console.log('Please change it after first login!');
+    }
+
+    // Initialize categories
+    const catResult = await client.query('SELECT COUNT(*) as count FROM categories');
+    if (catResult.rows[0].count == 0) {
+      const categories = [
+        { game_type: 'LIBRE', level: 'N3GC', display_name: 'LIBRE - NATIONALE 3 GC' },
+        { game_type: 'LIBRE', level: 'R1', display_name: 'LIBRE - REGIONALE 1' },
+        { game_type: 'LIBRE', level: 'R2', display_name: 'LIBRE - REGIONALE 2' },
+        { game_type: 'LIBRE', level: 'R3', display_name: 'LIBRE - REGIONALE 3' },
+        { game_type: 'LIBRE', level: 'R4', display_name: 'LIBRE - REGIONALE 4' },
+        { game_type: 'CADRE', level: 'N3', display_name: 'CADRE - NATIONALE 3' },
+        { game_type: 'CADRE', level: 'R1', display_name: 'CADRE - REGIONALE 1' },
+        { game_type: 'BANDE', level: 'N3', display_name: 'BANDE - NATIONALE 3' },
+        { game_type: 'BANDE', level: 'R1', display_name: 'BANDE - REGIONALE 1' },
+        { game_type: 'BANDE', level: 'R2', display_name: 'BANDE - REGIONALE 2' },
+        { game_type: '3BANDES', level: 'N3', display_name: '3 BANDES - NATIONALE 3' },
+        { game_type: '3BANDES', level: 'R1', display_name: '3 BANDES - REGIONALE 1' },
+        { game_type: '3BANDES', level: 'R2', display_name: '3 BANDES - REGIONALE 2' }
+      ];
+
+      for (const cat of categories) {
+        await client.query(
+          'INSERT INTO categories (game_type, level, display_name) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+          [cat.game_type, cat.level, cat.display_name]
+        );
+      }
+      console.log('Categories initialized');
+    }
+
+    // Initialize default clubs
+    const clubResult = await client.query('SELECT COUNT(*) as count FROM clubs');
+    if (clubResult.rows[0].count == 0) {
+      const defaultClubs = [
+        { name: 'Châtillon', display_name: 'Billard Club de Châtillon', logo_filename: 'S_C_M_C_BILLARD_CLUB.png' },
+        { name: 'A DE BILLARD COURBEVOIE LA DEFENSE', display_name: 'A DE BILLARD COURBEVOIE LA DEFENSE', logo_filename: 'A_DE_BILLARD_COURBEVOIE_LA_DEFENSE.png' },
+        { name: 'BILLARD BOIS COLOMBES', display_name: 'BILLARD BOIS COLOMBES', logo_filename: 'BILLARD_BOIS_COLOMBES.png' },
+        { name: 'BILLARD CLUB CLICHOIS', display_name: 'BILLARD CLUB CLICHOIS', logo_filename: 'BILLARD_CLUB_CLICHOIS.png' },
+        { name: 'BILLARD CLUB LA GARENNE CLAMART', display_name: 'BILLARD CLUB LA GARENNE CLAMART', logo_filename: 'BILLARD_CLUB_LA_GARENNE_CLAMART.png' },
+        { name: 'S C M C BILLARD CLUB', display_name: 'S C M C BILLARD CLUB', logo_filename: 'S_C_M_C_BILLARD_CLUB.png' }
+      ];
+
+      for (const club of defaultClubs) {
+        await client.query(
+          'INSERT INTO clubs (name, display_name, logo_filename) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+          [club.name, club.display_name, club.logo_filename]
+        );
+      }
+      console.log('Default clubs initialized');
+    }
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error initializing database:', err);
+  } finally {
+    client.release();
+  }
+}
+
+// Wrapper to make PostgreSQL API compatible with SQLite
+const db = {
+  // For SELECT queries that return multiple rows
+  all: (query, params, callback) => {
+    // Convert SQLite ? placeholders to PostgreSQL $1, $2, etc.
+    let pgQuery = query;
+    let pgParams = params;
+    let paramIndex = 1;
+    pgQuery = query.replace(/\?/g, () => `$${paramIndex++}`);
+
+    pool.query(pgQuery, pgParams)
+      .then(result => callback(null, result.rows))
+      .catch(err => callback(err));
+  },
+
+  // For SELECT queries that return a single row
+  get: (query, params, callback) => {
+    let pgQuery = query;
+    let paramIndex = 1;
+    pgQuery = query.replace(/\?/g, () => `$${paramIndex++}`);
+
+    pool.query(pgQuery, params)
+      .then(result => callback(null, result.rows[0]))
+      .catch(err => callback(err));
+  },
+
+  // For INSERT/UPDATE/DELETE queries
+  run: (query, params, callback) => {
+    let pgQuery = query;
+    let paramIndex = 1;
+    pgQuery = query.replace(/\?/g, () => `$${paramIndex++}`);
+
+    pool.query(pgQuery, params)
+      .then(result => {
+        if (callback) {
+          // Call callback with 'this' context containing lastID and changes
+          const context = {
+            lastID: result.rows[0]?.id,
+            changes: result.rowCount
+          };
+          callback.call(context, null);
+        }
+      })
+      .catch(err => {
+        if (callback) callback(err);
+      });
+  },
+
+  // For prepared statements (serialize operations)
+  serialize: (callback) => {
+    callback();
+  },
+
+  // For prepared statements
+  prepare: (query) => {
+    // Convert SQLite ? placeholders to PostgreSQL $1, $2, etc.
+    let paramIndex = 1;
+    const pgQuery = query.replace(/\?/g, () => `$${paramIndex++}`);
+
+    const statement = {
+      run: (...args) => {
+        const callback = typeof args[args.length - 1] === 'function' ? args.pop() : null;
+        const params = args;
+
+        pool.query(pgQuery, params)
+          .then(result => {
+            if (callback) {
+              // Call callback with 'this' context containing lastID and changes
+              const context = {
+                lastID: result.rows[0]?.id,
+                changes: result.rowCount
+              };
+              callback.call(context, null);
+            }
+          })
+          .catch(err => {
+            if (callback) callback(err);
+          });
+      },
+
+      finalize: (callback) => {
+        // In PostgreSQL, there's nothing to finalize for a prepared statement
+        // Just call the callback immediately
+        if (callback) {
+          setImmediate(callback);
+        }
+      }
+    };
+
+    return statement;
+  }
+};
+
+module.exports = db;

@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Liste des Joueurs - Billard Ranking</title>
+  <link rel="icon" type="image/png" href="images/billiard-icon.png">
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    .club-cell {
+      position: relative;
+      cursor: pointer;
+    }
+    .club-cell:hover {
+      background-color: #f5f5f5;
+    }
+    .club-edit-container {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+    .club-edit-select {
+      padding: 4px 8px;
+      border: 1px solid #4CAF50;
+      border-radius: 4px;
+      font-size: 14px;
+      max-width: 200px;
+    }
+    .club-edit-btn {
+      padding: 4px 8px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .club-edit-save {
+      background-color: #4CAF50;
+      color: white;
+    }
+    .club-edit-cancel {
+      background-color: #dc3545;
+      color: white;
+    }
+    .club-edit-indicator {
+      color: #4CAF50;
+      font-size: 12px;
+      margin-left: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="navbar">
+      <h2><img src="images/billiard-icon.png" alt="🎱" style="height: 28px; width: 28px; vertical-align: middle; margin-right: 8px;" onerror="this.style.display='none'; this.nextSibling.style.display='inline';"><span style="display:none;">🎱</span> Liste des Joueurs</h2>
+      <div class="nav-links">
+        <a href="dashboard.html">Accueil</a>
+        <a href="players-list.html">Joueurs</a>
+        <a href="import-players.html">Import Joueurs</a>
+        <a href="import-tournament.html">Import Tournoi</a>
+        <a href="rankings.html">Classements</a>
+        <a href="calendar.html">Calendrier</a>
+        <a href="#" id="logoutBtn">Déconnexion</a>
+      </div>
+    </div>
+
+    <div id="errorMessage" class="error" style="display: none;"></div>
+
+    <div class="stats-grid" style="margin-bottom: 20px;">
+      <div class="stat-card">
+        <h4>Joueurs Actifs</h4>
+        <div class="stat-value" id="activeCount">-</div>
+      </div>
+      <div class="stat-card">
+        <h4>Joueurs Inactifs</h4>
+        <div class="stat-value" id="inactiveCount">-</div>
+      </div>
+      <div class="stat-card">
+        <h4>Total</h4>
+        <div class="stat-value" id="totalCount">-</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 20px; text-align: right;">
+      <button id="clearPlayersBtn" class="btn" style="background-color: #dc3545; color: white;">
+        🗑️ Effacer tous les joueurs
+      </button>
+    </div>
+
+    <div class="card">
+      <h3>Tous les Joueurs</h3>
+
+      <div style="margin-bottom: 20px;">
+        <input type="text" id="searchInput" placeholder="🔍 Rechercher par nom, licence ou club..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+      </div>
+
+      <div id="loadingPlayers" class="loading">
+        <div class="spinner"></div>
+        Chargement des joueurs...
+      </div>
+
+      <div id="playersTable" style="display: none;">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Licence</th>
+                <th>Nom</th>
+                <th>Prénom</th>
+                <th>Club</th>
+                <th>Libre</th>
+                <th>Cadre</th>
+                <th>Bande</th>
+                <th>3 Bandes</th>
+                <th>Statut</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="playersBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Player Modal -->
+    <div id="editPlayerModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+      <div style="background: white; padding: 30px; border-radius: 12px; max-width: 500px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+        <h3 style="margin-top: 0;">✏️ Modifier le joueur</h3>
+        <form id="editPlayerForm">
+          <input type="hidden" id="edit_licence">
+
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Licence</label>
+            <input type="text" id="edit_licence_display" readonly style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; background: #f5f5f5;">
+          </div>
+
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Prénom</label>
+            <input type="text" id="edit_first_name" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Nom</label>
+            <input type="text" id="edit_last_name" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Club</label>
+            <select id="edit_club" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+              <option value="">-- Sélectionner un club --</option>
+            </select>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+            <div>
+              <label style="display: block; margin-bottom: 5px; font-weight: bold;">Libre</label>
+              <input type="text" id="edit_rank_libre" placeholder="NC" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+            <div>
+              <label style="display: block; margin-bottom: 5px; font-weight: bold;">Cadre</label>
+              <input type="text" id="edit_rank_cadre" placeholder="NC" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+            <div>
+              <label style="display: block; margin-bottom: 5px; font-weight: bold;">Bande</label>
+              <input type="text" id="edit_rank_bande" placeholder="NC" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+            <div>
+              <label style="display: block; margin-bottom: 5px; font-weight: bold;">3 Bandes</label>
+              <input type="text" id="edit_rank_3bandes" placeholder="NC" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button type="submit" class="btn" style="flex: 1; background: #4CAF50;">Enregistrer</button>
+            <button type="button" id="cancelEditBtn" class="btn" style="flex: 1; background: #999;">Annuler</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = '/api';
+
+    // Check authentication
+    const token = localStorage.getItem('token');
+    if (!token) {
+      window.location.href = 'login.html';
+    }
+
+    // Get user role from JWT token
+    let userRole = 'viewer';
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      userRole = payload.role || (payload.admin ? 'admin' : 'viewer');
+    } catch (e) {
+      console.error('Error decoding token:', e);
+    }
+
+    const isAdmin = userRole === 'admin';
+
+    // Hide admin-only elements for non-admin users
+    if (!isAdmin) {
+      // Hide clear all players button
+      const clearBtn = document.getElementById('clearPlayersBtn');
+      if (clearBtn) clearBtn.style.display = 'none';
+
+      // Hide Actions column header
+      const actionsHeader = document.querySelector('thead th:last-child');
+      if (actionsHeader && actionsHeader.textContent === 'Actions') {
+        actionsHeader.style.display = 'none';
+      }
+    }
+
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      window.location.href = 'login.html';
+    });
+
+    let allPlayers = [];
+
+    // Load players
+    async function loadPlayers() {
+      try {
+        const response = await fetch(`${API_URL}/players`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to load players');
+        }
+
+        allPlayers = await response.json();
+
+        // Count active/inactive
+        const activePlayers = allPlayers.filter(p => p.is_active === 1);
+        const inactivePlayers = allPlayers.filter(p => p.is_active === 0);
+
+        document.getElementById('activeCount').textContent = activePlayers.length;
+        document.getElementById('inactiveCount').textContent = inactivePlayers.length;
+        document.getElementById('totalCount').textContent = allPlayers.length;
+
+        displayPlayers(allPlayers);
+
+        document.getElementById('loadingPlayers').style.display = 'none';
+        document.getElementById('playersTable').style.display = 'block';
+
+      } catch (error) {
+        console.error('Error loading players:', error);
+        document.getElementById('loadingPlayers').style.display = 'none';
+        document.getElementById('errorMessage').textContent = 'Erreur lors du chargement des joueurs';
+        document.getElementById('errorMessage').style.display = 'block';
+      }
+    }
+
+    // Get standardized club names from database
+    let clubsList = [];
+
+    async function loadClubsList() {
+      try {
+        const response = await fetch(`${API_URL}/clubs`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const clubs = await response.json();
+          clubsList = clubs.map(club => club.name).sort();
+        }
+      } catch (error) {
+        console.error('Error loading clubs list:', error);
+      }
+    }
+
+    function getStandardClubNames() {
+      return clubsList;
+    }
+
+    // Update club name for a player
+    async function updateClubName(licence, newClubName) {
+      try {
+        const response = await fetch(`${API_URL}/players/${licence}/club`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ club: newClubName })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to update club name');
+        }
+
+        // Update local data
+        const player = allPlayers.find(p => p.licence === licence);
+        if (player) {
+          player.club = newClubName;
+        }
+
+        return true;
+      } catch (error) {
+        console.error('Error updating club name:', error);
+        alert('Erreur lors de la mise à jour du club');
+        return false;
+      }
+    }
+
+    // Make club cell editable
+    function makeClubEditable(cell, licence, currentClub) {
+      // Remove click handler to prevent re-triggering
+      cell.onclick = null;
+      cell.classList.remove('club-cell');
+
+      const standardClubs = getStandardClubNames();
+
+      cell.innerHTML = `
+        <div class="club-edit-container">
+          <select class="club-edit-select">
+            <option value="">-- Sélectionner un club --</option>
+            ${standardClubs.map(club => `
+              <option value="${club}" ${club === currentClub ? 'selected' : ''}>
+                ${club}
+              </option>
+            `).join('')}
+          </select>
+          <button class="club-edit-btn club-edit-save" title="Enregistrer">✓</button>
+          <button class="club-edit-btn club-edit-cancel" title="Annuler">✗</button>
+        </div>
+      `;
+
+      const select = cell.querySelector('.club-edit-select');
+      const saveBtn = cell.querySelector('.club-edit-save');
+      const cancelBtn = cell.querySelector('.club-edit-cancel');
+
+      // Stop propagation on the container
+      const container = cell.querySelector('.club-edit-container');
+      container.onclick = (e) => e.stopPropagation();
+
+      // Focus on select
+      setTimeout(() => select.focus(), 0);
+
+      // Save button click
+      saveBtn.onclick = async (e) => {
+        e.stopPropagation();
+        const newClub = select.value;
+
+        if (!newClub) {
+          alert('Veuillez sélectionner un club');
+          return;
+        }
+
+        const success = await updateClubName(licence, newClub);
+        if (success) {
+          cell.innerHTML = `${newClub} <span class="club-edit-indicator">✓ Mis à jour</span>`;
+          setTimeout(() => {
+            cell.innerHTML = newClub;
+            cell.classList.add('club-cell');
+            cell.onclick = () => makeClubEditable(cell, licence, newClub);
+          }, 2000);
+        } else {
+          // Restore on error
+          cell.innerHTML = currentClub || '-';
+          cell.classList.add('club-cell');
+          cell.onclick = () => makeClubEditable(cell, licence, currentClub);
+        }
+      };
+
+      // Cancel button click
+      cancelBtn.onclick = (e) => {
+        e.stopPropagation();
+        cell.innerHTML = currentClub || '-';
+        cell.classList.add('club-cell');
+        cell.onclick = () => makeClubEditable(cell, licence, currentClub);
+      };
+
+      // Enter key to save, Escape to cancel
+      select.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          saveBtn.click();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          cancelBtn.click();
+        }
+      };
+    }
+
+    // Open edit modal
+    function openEditModal(player) {
+      document.getElementById('edit_licence').value = player.licence;
+      document.getElementById('edit_licence_display').value = player.licence;
+      document.getElementById('edit_first_name').value = player.first_name || '';
+      document.getElementById('edit_last_name').value = player.last_name || '';
+      document.getElementById('edit_rank_libre').value = player.rank_libre || '';
+      document.getElementById('edit_rank_cadre').value = player.rank_cadre || '';
+      document.getElementById('edit_rank_bande').value = player.rank_bande || '';
+      document.getElementById('edit_rank_3bandes').value = player.rank_3bandes || '';
+
+      // Populate club dropdown
+      const clubSelect = document.getElementById('edit_club');
+      clubSelect.innerHTML = '<option value="">-- Sélectionner un club --</option>' +
+        clubsList.map(club => `<option value="${club}" ${club === player.club ? 'selected' : ''}>${club}</option>`).join('');
+
+      document.getElementById('editPlayerModal').style.display = 'flex';
+    }
+
+    // Close edit modal
+    function closeEditModal() {
+      document.getElementById('editPlayerModal').style.display = 'none';
+    }
+
+    // Update player
+    async function updatePlayer(playerData) {
+      try {
+        const response = await fetch(`${API_URL}/players/${playerData.licence}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(playerData)
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to update player');
+        }
+
+        return true;
+      } catch (error) {
+        console.error('Error updating player:', error);
+        alert('Erreur lors de la mise à jour: ' + error.message);
+        return false;
+      }
+    }
+
+    // Display players in table
+    function displayPlayers(players) {
+      const tbody = document.getElementById('playersBody');
+      tbody.innerHTML = '';
+
+      if (players.length === 0) {
+        const colspan = isAdmin ? 10 : 9;
+        tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center; padding: 20px;">Aucun joueur trouvé</td></tr>`;
+        return;
+      }
+
+      players.forEach(player => {
+        const row = document.createElement('tr');
+        if (player.is_active === 0) {
+          row.style.opacity = '0.5';
+        }
+
+        row.innerHTML = `
+          <td>${player.licence}</td>
+          <td><a href="player-history.html?licence=${player.licence}" class="player-link">${player.last_name}</a></td>
+          <td><a href="player-history.html?licence=${player.licence}" class="player-link">${player.first_name}</a></td>
+          <td>${player.club || '-'}</td>
+          <td style="text-align: center;">${player.rank_libre || 'NC'}</td>
+          <td style="text-align: center;">${player.rank_cadre || 'NC'}</td>
+          <td style="text-align: center;">${player.rank_bande || 'NC'}</td>
+          <td style="text-align: center;">${player.rank_3bandes || 'NC'}</td>
+          <td style="text-align: center;">
+            <span style="color: ${player.is_active ? '#4CAF50' : '#999'}; font-weight: bold;">
+              ${player.is_active ? '✓ Actif' : '✗ Inactif'}
+            </span>
+          </td>
+          ${isAdmin ? `
+          <td style="text-align: center;">
+            <button class="btn btn-small edit-player-btn" style="background: #4CAF50; padding: 5px 10px; font-size: 12px;">✏️ Modifier</button>
+          </td>
+          ` : ''}
+        `;
+
+        tbody.appendChild(row);
+
+        // Add click event to edit button (only for admin)
+        if (isAdmin) {
+          const editBtn = row.querySelector('.edit-player-btn');
+          if (editBtn) {
+            editBtn.onclick = (e) => {
+              e.stopPropagation();
+              openEditModal(player);
+            };
+          }
+        }
+      });
+    }
+
+    // Edit form submission
+    document.getElementById('editPlayerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const playerData = {
+        licence: document.getElementById('edit_licence').value,
+        first_name: document.getElementById('edit_first_name').value,
+        last_name: document.getElementById('edit_last_name').value,
+        club: document.getElementById('edit_club').value,
+        rank_libre: document.getElementById('edit_rank_libre').value || null,
+        rank_cadre: document.getElementById('edit_rank_cadre').value || null,
+        rank_bande: document.getElementById('edit_rank_bande').value || null,
+        rank_3bandes: document.getElementById('edit_rank_3bandes').value || null
+      };
+
+      const success = await updatePlayer(playerData);
+      if (success) {
+        closeEditModal();
+        // Reload players
+        await loadPlayers();
+        alert('Joueur mis à jour avec succès!');
+      }
+    });
+
+    // Cancel button
+    document.getElementById('cancelEditBtn').addEventListener('click', closeEditModal);
+
+    // Search functionality
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      const searchTerm = e.target.value.toLowerCase();
+      const filteredPlayers = allPlayers.filter(player => {
+        return player.licence.toLowerCase().includes(searchTerm) ||
+               player.first_name.toLowerCase().includes(searchTerm) ||
+               player.last_name.toLowerCase().includes(searchTerm) ||
+               (player.club && player.club.toLowerCase().includes(searchTerm));
+      });
+      displayPlayers(filteredPlayers);
+    });
+
+    // Clear all players button
+    document.getElementById('clearPlayersBtn').addEventListener('click', async () => {
+      const password = prompt('⚠️ ATTENTION ⚠️\n\nCette action va supprimer TOUS les joueurs de la base de données.\n\nPour confirmer, entrez votre mot de passe admin :');
+
+      if (!password) {
+        return; // User cancelled
+      }
+
+      // Verify password by attempting to login
+      try {
+        const loginResponse = await fetch(`${API_URL}/auth/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            username: 'admin',
+            password: password
+          })
+        });
+
+        if (!loginResponse.ok) {
+          alert('❌ Mot de passe incorrect');
+          return;
+        }
+
+        // Password is correct, proceed with deletion
+        const confirmDelete = confirm(`Êtes-vous absolument sûr ?\n\nCette action supprimera ${allPlayers.length} joueurs et ne peut pas être annulée.`);
+
+        if (!confirmDelete) {
+          return;
+        }
+
+        // Delete all players
+        const deleteResponse = await fetch(`${API_URL}/players/all`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!deleteResponse.ok) {
+          throw new Error('Erreur lors de la suppression');
+        }
+
+        const result = await deleteResponse.json();
+        alert(`✅ ${result.deleted} joueurs supprimés avec succès`);
+
+        // Reload the page
+        loadPlayers();
+      } catch (error) {
+        console.error('Error clearing players:', error);
+        alert('❌ Erreur lors de la suppression des joueurs');
+      }
+    });
+
+    // Initialize
+    async function initialize() {
+      await loadClubsList();
+      loadPlayers();
+    }
+
+    initialize();
+  </script>
+</body>
+</html>
+

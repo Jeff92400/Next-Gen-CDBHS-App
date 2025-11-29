@@ -1,0 +1,1487 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Générer Poules - CDBHS</title>
+  <link rel="icon" type="image/png" href="images/billiard-icon.png">
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    .player-list {
+      max-height: 400px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .player-item {
+      display: flex;
+      align-items: center;
+      padding: 10px 15px;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .player-item:hover {
+      background: #f5f5f5;
+    }
+    .player-item.selected {
+      background: #e3f2fd;
+    }
+    .player-item.new-player {
+      background: #fff3e0;
+    }
+    .player-item.new-player.selected {
+      background: #ffe0b2;
+    }
+    .player-item input[type="checkbox"] {
+      margin-right: 15px;
+      transform: scale(1.2);
+    }
+    .player-rank {
+      width: 40px;
+      font-weight: bold;
+      color: #1F4788;
+    }
+    .player-name {
+      flex: 1;
+      font-weight: 500;
+    }
+    .player-club {
+      color: #666;
+      font-size: 0.9em;
+      margin-left: 10px;
+    }
+    .player-licence {
+      color: #999;
+      font-size: 0.85em;
+      margin-left: 10px;
+    }
+    .badge {
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.75em;
+      margin-left: 10px;
+    }
+    .badge-new {
+      background: #ff9800;
+      color: white;
+    }
+    .badge-forfait {
+      background: #dc3545;
+      color: white;
+    }
+    .badge-inscrit {
+      background: #28a745;
+      color: white;
+    }
+    .poule-preview {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 15px;
+      margin-top: 20px;
+    }
+    .poule-card {
+      border: 2px solid #1F4788;
+      border-radius: 8px;
+      padding: 15px;
+      background: white;
+    }
+    .poule-card h4 {
+      margin: 0 0 10px 0;
+      color: #1F4788;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 5px;
+    }
+    .poule-player {
+      padding: 5px 0;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .poule-player-rank {
+      width: 25px;
+      font-weight: bold;
+      color: #666;
+    }
+    .move-player-btn {
+      margin-left: auto;
+      padding: 2px 8px;
+      font-size: 0.75em;
+      background: #6c757d;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+    .move-player-btn:hover {
+      opacity: 1;
+    }
+    .move-dropdown {
+      position: absolute;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      z-index: 100;
+      min-width: 120px;
+    }
+    .move-dropdown-item {
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .move-dropdown-item:hover {
+      background: #f5f5f5;
+    }
+    .poule-card {
+      position: relative;
+    }
+    .step-indicator {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 30px;
+    }
+    .step {
+      display: flex;
+      align-items: center;
+      color: #999;
+    }
+    .step.active {
+      color: #1F4788;
+      font-weight: bold;
+    }
+    .step.completed {
+      color: #28a745;
+    }
+    .step-number {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: #ddd;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 8px;
+      font-weight: bold;
+    }
+    .step.active .step-number {
+      background: #1F4788;
+      color: white;
+    }
+    .step.completed .step-number {
+      background: #28a745;
+      color: white;
+    }
+    .step-separator {
+      width: 50px;
+      height: 2px;
+      background: #ddd;
+      margin: 0 15px;
+    }
+    .summary-box {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      padding: 15px;
+      margin: 15px 0;
+    }
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 0;
+    }
+    .action-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="navbar">
+      <h2><img src="images/billiard-icon.png" alt="🎱" style="height: 28px; width: 28px; vertical-align: middle; margin-right: 8px;" onerror="this.style.display='none'; this.nextSibling.style.display='inline';"><span style="display:none;">🎱</span> CDBHS Tournois</h2>
+      <div class="nav-links">
+        <a href="dashboard.html">Accueil</a>
+        <div class="nav-dropdown">
+          <button class="nav-dropdown-btn">Fichiers</button>
+          <div class="nav-dropdown-content">
+            <a href="players-list.html"><span class="nav-icon">👥</span> Joueurs</a>
+            <a href="tournaments-list.html"><span class="nav-icon">🏆</span> Tournois joués</a>
+            <a href="import-external.html"><span class="nav-icon">📋</span> Compétitions & Inscriptions</a>
+            <a href="clubs.html"><span class="nav-icon">🏢</span> Clubs</a>
+          </div>
+        </div>
+        <a href="rankings.html">Classements</a>
+        <a href="tournaments-list.html">Tournois joués</a>
+        <a href="generate-poules.html" class="active">Tournois à jouer</a>
+        <div class="nav-dropdown">
+          <button class="nav-dropdown-btn">Paramètres</button>
+          <div class="nav-dropdown-content">
+            <a href="settings.html"><span class="nav-icon">⚙️</span> Configuration</a>
+            <a href="calendar.html"><span class="nav-icon">📅</span> Calendrier</a>
+          </div>
+        </div>
+        <a href="#" id="logoutBtn" class="nav-logout">Déconnexion</a>
+      </div>
+    </div>
+
+    <div id="errorMessage" class="error" style="display: none;"></div>
+    <div id="successMessage" class="success" style="display: none;"></div>
+
+    <!-- Warning: Update inscriptions -->
+    <div class="card" id="inscriptionWarning" style="background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%); border-left: 5px solid #ffc107; margin-bottom: 20px;">
+      <div style="display: flex; align-items: flex-start; gap: 15px;">
+        <div style="font-size: 32px;">⚠️</div>
+        <div style="flex: 1;">
+          <h3 style="margin: 0 0 10px 0; color: #856404;">Mise à jour des inscriptions</h3>
+          <p style="margin: 0 0 15px 0; color: #856404;">
+            Avant de générer les poules, assurez-vous que le fichier des inscriptions est à jour depuis la base IONOS.
+          </p>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <a href="import-external.html" class="btn" style="background: #ffc107; color: #856404; font-weight: bold;">
+              📤 Mettre à jour les inscriptions
+            </a>
+            <button class="btn" id="skipInscriptionUpdate" style="background: #6c757d;">
+              Continuer sans mise à jour →
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step Indicator -->
+    <div class="step-indicator" id="stepIndicatorContainer" style="display: none;">
+      <div class="step active" id="step1Indicator">
+        <span class="step-number">1</span>
+        <span>Sélection</span>
+      </div>
+      <div class="step-separator"></div>
+      <div class="step" id="step2Indicator">
+        <span class="step-number">2</span>
+        <span>Joueurs</span>
+      </div>
+      <div class="step-separator"></div>
+      <div class="step" id="step3Indicator">
+        <span class="step-number">3</span>
+        <span>Validation</span>
+      </div>
+      <div class="step-separator"></div>
+      <div class="step" id="step4Indicator">
+        <span class="step-number">4</span>
+        <span>Génération</span>
+      </div>
+    </div>
+
+    <!-- Step 1: Select Tournament -->
+    <div class="card" id="step1" style="display: none;">
+      <h3>Étape 1: Sélectionner le Tournoi</h3>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+        <div>
+          <label for="categorySelect" style="display: block; margin-bottom: 5px; font-weight: 500;">Catégorie</label>
+          <select id="categorySelect" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+            <option value="">-- Sélectionner --</option>
+          </select>
+        </div>
+        <div>
+          <label for="seasonSelect" style="display: block; margin-bottom: 5px; font-weight: 500;">Saison</label>
+          <select id="seasonSelect" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+            <option value="">-- Sélectionner --</option>
+          </select>
+        </div>
+        <div>
+          <label for="tournamentSelect" style="display: block; margin-bottom: 5px; font-weight: 500;">Tournoi à préparer</label>
+          <select id="tournamentSelect" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+            <option value="">-- Sélectionner --</option>
+            <option value="1">Tournoi 1</option>
+            <option value="2">Tournoi 2</option>
+            <option value="3">Tournoi 3</option>
+            <option value="4">Finale Départementale</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="tournamentInfo" style="display: none; margin-bottom: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #1F4788;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <strong id="tournamentInfoName" style="color: #1F4788; font-size: 1.1em;">-</strong>
+            <p style="margin: 5px 0 0 0; color: #666;">
+              Date: <strong id="tournamentInfoDate">-</strong> |
+              Lieu: <strong id="tournamentInfoLieu">-</strong> |
+              Inscrits: <strong id="tournamentInfoInscrits">-</strong>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn" id="loadPlayersBtn" disabled>Charger les joueurs</button>
+    </div>
+
+    <!-- Step 2: Select Players -->
+    <div class="card" id="step2" style="display: none;">
+      <h3>Étape 2: Sélectionner les Joueurs</h3>
+
+      <div class="summary-box">
+        <div class="summary-row">
+          <span>Joueurs sélectionnés:</span>
+          <strong id="selectedCount">0</strong>
+        </div>
+        <div class="summary-row">
+          <span>Configuration des poules:</span>
+          <strong id="pouleConfig">-</strong>
+        </div>
+        <div class="summary-row">
+          <span>Tables nécessaires:</span>
+          <strong id="tablesNeeded">-</strong>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 15px; display: flex; gap: 10px;">
+        <button class="btn" id="selectAllBtn">Tout sélectionner</button>
+        <button class="btn" id="deselectAllBtn" style="background: #6c757d;">Tout désélectionner</button>
+        <button class="btn" id="selectRegisteredBtn" style="background: #17a2b8;">Sélectionner les inscrits</button>
+      </div>
+
+      <h4>Joueurs classés (du classement actuel)</h4>
+      <div class="player-list" id="rankedPlayersList">
+        <p style="padding: 20px; color: #666; text-align: center;">Chargement...</p>
+      </div>
+
+      <h4 style="margin-top: 20px;">Nouveaux joueurs (inscrits non classés)</h4>
+      <div class="player-list" id="newPlayersList">
+        <p style="padding: 20px; color: #666; text-align: center;">Aucun nouveau joueur</p>
+      </div>
+
+      <h4 style="margin-top: 20px;">Ajout last minute</h4>
+      <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 15px;">
+        <p style="color: #666; font-size: 0.9em; margin-bottom: 10px;">Ajouter un joueur qui n'est pas inscrit dans le système externe</p>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <input type="text" id="lastMinuteSearch" placeholder="Rechercher par nom ou licence..."
+                 style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+          <button class="btn" id="addLastMinuteBtn" style="background: #dc3545;" disabled>Ajouter</button>
+        </div>
+        <div id="lastMinuteResults" style="display: none; max-height: 200px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; margin-top: 10px; background: white;"></div>
+        <div class="player-list" id="lastMinutePlayersList" style="margin-top: 10px; max-height: 150px;"></div>
+      </div>
+
+      <div class="action-buttons">
+        <button class="btn" id="backToStep1Btn" style="background: #6c757d;">Retour</button>
+        <button class="btn" id="validatePlayersBtn" disabled>Valider la liste</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Validate & Preview -->
+    <div class="card" id="step3" style="display: none;">
+      <h3>Étape 3: Validation et Aperçu</h3>
+
+      <div class="summary-box">
+        <div class="summary-row">
+          <span>Catégorie:</span>
+          <strong id="summaryCategory">-</strong>
+        </div>
+        <div class="summary-row">
+          <span>Tournoi:</span>
+          <strong id="summaryTournament">-</strong>
+        </div>
+        <div class="summary-row">
+          <span>Date:</span>
+          <strong id="summaryDate">-</strong>
+        </div>
+        <div class="summary-row">
+          <span>Lieu:</span>
+          <strong id="summaryLieu">-</strong>
+        </div>
+        <div class="summary-row">
+          <span>Nombre de joueurs:</span>
+          <strong id="summaryPlayers">-</strong>
+        </div>
+        <div class="summary-row">
+          <span>Configuration:</span>
+          <strong id="summaryConfig">-</strong>
+        </div>
+        <div class="summary-row">
+          <span>Tables nécessaires:</span>
+          <strong id="summaryTables">-</strong>
+        </div>
+      </div>
+
+      <h4>Aperçu des Poules (Distribution Serpentine)</h4>
+      <div class="poule-preview" id="poulePreview">
+        <!-- Poules will be rendered here -->
+      </div>
+
+      <h4 style="margin-top: 30px;">Lieu et Horaire de la Compétition</h4>
+      <div class="summary-box">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+          <div>
+            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Lieu principal</label>
+            <select id="locationSelect1" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+              <option value="">-- Sélectionner un club --</option>
+            </select>
+          </div>
+          <div>
+            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Heure de début</label>
+            <select id="startTime1" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+              <option value="">-- Sélectionner --</option>
+              <option value="08:00">08:00</option>
+              <option value="08:30">08:30</option>
+              <option value="09:00">09:00</option>
+              <option value="09:30">09:30</option>
+              <option value="10:00">10:00</option>
+              <option value="10:30">10:30</option>
+              <option value="11:00">11:00</option>
+              <option value="11:30">11:30</option>
+              <option value="12:00">12:00</option>
+              <option value="12:30">12:30</option>
+              <option value="13:00">13:00</option>
+              <option value="13:30">13:30</option>
+              <option value="14:00" selected>14:00</option>
+              <option value="14:30">14:30</option>
+              <option value="15:00">15:00</option>
+              <option value="15:30">15:30</option>
+              <option value="16:00">16:00</option>
+              <option value="16:30">16:30</option>
+              <option value="17:00">17:00</option>
+              <option value="17:30">17:30</option>
+              <option value="18:00">18:00</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="location2Container" style="display: none; margin-top: 15px; padding-top: 15px; border-top: 1px dashed #ddd;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 20px; align-items: end;">
+            <div>
+              <label style="display: block; margin-bottom: 5px; font-weight: 500;">Lieu secondaire (split)</label>
+              <select id="locationSelect2" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                <option value="">-- Sélectionner un club --</option>
+              </select>
+            </div>
+            <div>
+              <label style="display: block; margin-bottom: 5px; font-weight: 500;">Heure de début</label>
+              <select id="startTime2" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                <option value="">-- Sélectionner --</option>
+                <option value="08:00">08:00</option>
+                <option value="08:30">08:30</option>
+                <option value="09:00">09:00</option>
+                <option value="09:30">09:30</option>
+                <option value="10:00">10:00</option>
+                <option value="10:30">10:30</option>
+                <option value="11:00">11:00</option>
+                <option value="11:30">11:30</option>
+                <option value="12:00">12:00</option>
+                <option value="12:30">12:30</option>
+                <option value="13:00">13:00</option>
+                <option value="13:30">13:30</option>
+                <option value="14:00" selected>14:00</option>
+                <option value="14:30">14:30</option>
+                <option value="15:00">15:00</option>
+                <option value="15:30">15:30</option>
+                <option value="16:00">16:00</option>
+                <option value="16:30">16:30</option>
+                <option value="17:00">17:00</option>
+                <option value="17:30">17:30</option>
+                <option value="18:00">18:00</option>
+              </select>
+            </div>
+            <button class="btn" id="removeLocation2Btn" style="background: #dc3545; padding: 10px 15px;">Retirer</button>
+          </div>
+        </div>
+
+        <div style="margin-top: 15px;">
+          <button class="btn" id="addLocation2Btn" style="background: #17a2b8;">+ Ajouter un second lieu (split)</button>
+        </div>
+      </div>
+
+      <div class="action-buttons">
+        <button class="btn" id="backToStep2Btn" style="background: #6c757d;">Modifier la liste</button>
+        <button class="btn btn-success" id="generateExcelBtn" style="background: #28a745;">Générer le fichier Excel</button>
+      </div>
+    </div>
+
+    <!-- Step 4: Download -->
+    <div class="card" id="step4" style="display: none;">
+      <h3>Étape 4: Téléchargement</h3>
+      <div style="text-align: center; padding: 40px;">
+        <div style="font-size: 48px; margin-bottom: 20px;">✅</div>
+        <h4>Fichier généré avec succès !</h4>
+        <p style="color: #666; margin-bottom: 20px;">Le fichier Excel a été téléchargé automatiquement.</p>
+        <div class="action-buttons" style="justify-content: center;">
+          <button class="btn" id="backToStep3Btn" style="background: #6c757d;">Retour à l'aperçu</button>
+          <button class="btn" id="newGenerationBtn">Nouvelle génération</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = '/api';
+
+    // Check authentication
+    const token = localStorage.getItem('token');
+    if (!token) {
+      window.location.href = 'login.html';
+    }
+
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('userRole');
+      localStorage.removeItem('username');
+      window.location.href = 'login.html';
+    });
+
+    // Skip inscription update warning
+    document.getElementById('skipInscriptionUpdate').addEventListener('click', () => {
+      document.getElementById('inscriptionWarning').style.display = 'none';
+      document.getElementById('stepIndicatorContainer').style.display = 'flex';
+      document.getElementById('step1').style.display = 'block';
+    });
+
+    // State
+    let categories = [];
+    let rankedPlayers = [];
+    let newPlayers = [];
+    let lastMinutePlayers = [];
+    let allSystemPlayers = [];
+    let selectedPlayers = [];
+    let currentCategory = null;
+    let currentSeason = null;
+    let currentTournament = null;
+    let externalTournois = [];
+    let matchingTournoi = null;
+    let selectedLastMinutePlayer = null;
+    let clubs = [];
+
+    // Poule configuration based on number of players
+    const POULE_CONFIG = {
+      3: { poules: [3], tables: 1 },
+      4: { poules: [4], tables: 2 },
+      5: { poules: [5], tables: 2 },
+      6: { poules: [3, 3], tables: 2 },
+      7: { poules: [3, 4], tables: 3 },
+      8: { poules: [3, 5], tables: 3 },
+      9: { poules: [3, 3, 3], tables: 3 },
+      10: { poules: [3, 3, 4], tables: 4 },
+      11: { poules: [3, 3, 5], tables: 4 },
+      12: { poules: [3, 3, 3, 3], tables: 4 },
+      13: { poules: [3, 3, 3, 4], tables: 5 },
+      14: { poules: [3, 3, 3, 5], tables: 5 },
+      15: { poules: [3, 3, 3, 3, 3], tables: 5 },
+      16: { poules: [3, 3, 3, 3, 4], tables: 6 },
+      17: { poules: [3, 3, 3, 3, 5], tables: 6 },
+      18: { poules: [3, 3, 3, 3, 3, 3], tables: 6 },
+      19: { poules: [3, 3, 3, 3, 3, 4], tables: 7 },
+      20: { poules: [3, 3, 3, 3, 3, 5], tables: 7 }
+    };
+
+    // Get poule configuration for a given number of players
+    function getPouleConfig(numPlayers) {
+      if (numPlayers < 3) {
+        return { poules: [], tables: 0, description: 'Pas assez de joueurs' };
+      }
+      if (numPlayers > 20) {
+        // Extend pattern for more than 20 players
+        const base = Math.floor(numPlayers / 3);
+        const remainder = numPlayers % 3;
+        const poules = Array(base).fill(3);
+        if (remainder === 1) {
+          poules[poules.length - 1] = 4;
+        } else if (remainder === 2) {
+          poules[poules.length - 1] = 5;
+        }
+        return {
+          poules,
+          tables: poules.length + 1,
+          description: poules.map((p, i) => `Poule ${i + 1}: ${p}`).join(', ')
+        };
+      }
+      const config = POULE_CONFIG[numPlayers];
+      const description = config.poules.length === 1
+        ? `1 poule de ${config.poules[0]}`
+        : config.poules.map((p, i) => `${p}`).join(' + ') + ` (${config.poules.length} poules)`;
+      return { ...config, description };
+    }
+
+    // Serpentine distribution
+    function distributeSerpentine(players, pouleSizes) {
+      const numPoules = pouleSizes.length;
+      const poules = pouleSizes.map((size, i) => ({
+        number: i + 1,
+        size,
+        players: []
+      }));
+
+      let playerIndex = 0;
+      let round = 0;
+
+      while (playerIndex < players.length) {
+        const isLeftToRight = round % 2 === 0;
+
+        for (let i = 0; i < numPoules && playerIndex < players.length; i++) {
+          const pouleIndex = isLeftToRight ? i : (numPoules - 1 - i);
+          const poule = poules[pouleIndex];
+
+          if (poule.players.length < poule.size) {
+            poules[pouleIndex].players.push({
+              ...players[playerIndex],
+              originalRank: playerIndex + 1
+            });
+            playerIndex++;
+          }
+        }
+        round++;
+      }
+
+      return poules;
+    }
+
+    // Load categories
+    async function loadCategories() {
+      try {
+        const response = await fetch(`${API_URL}/tournaments`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const tournaments = await response.json();
+
+          // Extract unique categories
+          const categoryMap = new Map();
+          tournaments.forEach(t => {
+            const key = `${t.game_type}-${t.level}`;
+            if (!categoryMap.has(key)) {
+              categoryMap.set(key, {
+                id: t.category_id,
+                game_type: t.game_type,
+                level: t.level,
+                display_name: t.display_name
+              });
+            }
+          });
+
+          categories = Array.from(categoryMap.values());
+
+          const select = document.getElementById('categorySelect');
+          select.innerHTML = '<option value="">-- Sélectionner --</option>';
+          categories.forEach(cat => {
+            select.innerHTML += `<option value="${cat.id}">${cat.display_name}</option>`;
+          });
+
+          // Extract unique seasons
+          const seasons = [...new Set(tournaments.map(t => t.season))].sort().reverse();
+          const seasonSelect = document.getElementById('seasonSelect');
+          seasonSelect.innerHTML = '<option value="">-- Sélectionner --</option>';
+          seasons.forEach(season => {
+            seasonSelect.innerHTML += `<option value="${season}">${season}</option>`;
+          });
+
+          // Pre-select current season if available
+          if (seasons.length > 0) {
+            seasonSelect.value = seasons[0];
+            currentSeason = seasons[0];
+          }
+        }
+      } catch (error) {
+        console.error('Error loading categories:', error);
+      }
+    }
+
+    loadCategories();
+
+    // Load clubs for location selection
+    async function loadClubs() {
+      try {
+        const response = await fetch(`${API_URL}/clubs`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          clubs = await response.json();
+          populateLocationDropdowns();
+        }
+      } catch (error) {
+        console.error('Error loading clubs:', error);
+      }
+    }
+
+    function populateLocationDropdowns() {
+      const select1 = document.getElementById('locationSelect1');
+      const select2 = document.getElementById('locationSelect2');
+
+      const options = '<option value="">-- Sélectionner un club --</option>' +
+        clubs.map(c => {
+          const fullAddress = [c.street, c.zip_code, c.city].filter(Boolean).join(' ');
+          return `<option value="${c.id}"
+            data-name="${c.name}"
+            data-street="${c.street || ''}"
+            data-city="${c.city || ''}"
+            data-zipcode="${c.zip_code || ''}"
+            data-phone="${c.phone || ''}"
+            data-email="${c.email || ''}"
+            data-address="${fullAddress}">${c.name}</option>`;
+        }).join('');
+
+      select1.innerHTML = options;
+      select2.innerHTML = options;
+    }
+
+    function preselectLocation(locationName) {
+      if (!locationName || clubs.length === 0) return;
+
+      const select1 = document.getElementById('locationSelect1');
+      const locationLower = locationName.toLowerCase();
+
+      // Try to find matching club
+      for (const club of clubs) {
+        if (club.name.toLowerCase().includes(locationLower) ||
+            locationLower.includes(club.name.toLowerCase())) {
+          select1.value = club.id;
+          return;
+        }
+      }
+    }
+
+    loadClubs();
+
+    // Location add/remove handlers
+    document.getElementById('addLocation2Btn').addEventListener('click', () => {
+      document.getElementById('location2Container').style.display = 'block';
+      document.getElementById('addLocation2Btn').style.display = 'none';
+      updatePouleLocationLabels();
+    });
+
+    document.getElementById('removeLocation2Btn').addEventListener('click', () => {
+      document.getElementById('location2Container').style.display = 'none';
+      document.getElementById('addLocation2Btn').style.display = 'inline-block';
+      document.getElementById('locationSelect2').value = '';
+      // Reset all poules to location 1
+      document.querySelectorAll('.poule-location').forEach(select => select.value = '1');
+      updatePouleLocationLabels();
+    });
+
+    // Update poule labels when location dropdowns change
+    document.getElementById('locationSelect1').addEventListener('change', updatePouleLocationLabels);
+    document.getElementById('locationSelect2').addEventListener('change', updatePouleLocationLabels);
+
+    // Update load button state and load tournament info
+    function updateLoadButtonState() {
+      const categoryId = document.getElementById('categorySelect').value;
+      const season = document.getElementById('seasonSelect').value;
+      const tournament = document.getElementById('tournamentSelect').value;
+
+      document.getElementById('loadPlayersBtn').disabled = !categoryId || !season || !tournament;
+
+      // Load tournament info if all fields are selected
+      if (categoryId && tournament) {
+        loadTournamentInfo(categoryId, tournament);
+      } else {
+        document.getElementById('tournamentInfo').style.display = 'none';
+        matchingTournoi = null;
+      }
+    }
+
+    // Load external tournament info
+    async function loadTournamentInfo(categoryId, tournamentNum) {
+      const category = categories.find(c => c.id == categoryId);
+      if (!category) return;
+
+      try {
+        const response = await fetch(`${API_URL}/inscriptions/tournoi?mode=${category.game_type}&categorie=${category.level}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+          externalTournois = await response.json();
+
+          // Find matching tournament by name
+          const targetName = tournamentNum === '4' ? 'FINALE' : `TOURNOI ${tournamentNum}`;
+          matchingTournoi = externalTournois.find(t =>
+            t.nom.toUpperCase().includes(targetName) ||
+            (tournamentNum === '4' && t.nom.toUpperCase().includes('FINALE'))
+          );
+
+          if (matchingTournoi) {
+            // Load inscription count
+            const inscResponse = await fetch(`${API_URL}/inscriptions/tournoi/${matchingTournoi.tournoi_id}/inscriptions`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            let inscCount = 0;
+            if (inscResponse.ok) {
+              const inscriptions = await inscResponse.json();
+              inscCount = inscriptions.filter(i => i.forfait !== 1).length;
+            }
+
+            // Format date
+            const dateStr = matchingTournoi.debut
+              ? new Date(matchingTournoi.debut).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+              : 'Non définie';
+
+            document.getElementById('tournamentInfoName').textContent =
+              `${category.display_name} - ${matchingTournoi.nom}`;
+            document.getElementById('tournamentInfoDate').textContent = dateStr;
+            document.getElementById('tournamentInfoLieu').textContent = matchingTournoi.lieu || 'Non défini';
+            document.getElementById('tournamentInfoInscrits').textContent = `${inscCount} joueurs`;
+            document.getElementById('tournamentInfo').style.display = 'block';
+          } else {
+            document.getElementById('tournamentInfo').style.display = 'none';
+          }
+        }
+      } catch (error) {
+        console.error('Error loading tournament info:', error);
+        document.getElementById('tournamentInfo').style.display = 'none';
+      }
+    }
+
+    document.getElementById('categorySelect').addEventListener('change', updateLoadButtonState);
+    document.getElementById('seasonSelect').addEventListener('change', updateLoadButtonState);
+    document.getElementById('tournamentSelect').addEventListener('change', updateLoadButtonState);
+
+    // Load players for selected category
+    document.getElementById('loadPlayersBtn').addEventListener('click', async () => {
+      const categoryId = document.getElementById('categorySelect').value;
+      const season = document.getElementById('seasonSelect').value;
+      const tournamentNum = document.getElementById('tournamentSelect').value;
+
+      currentCategory = categories.find(c => c.id == categoryId);
+      currentSeason = season;
+      currentTournament = tournamentNum;
+
+      // Determine which ranking to load based on tournament number
+      const previousTournament = parseInt(tournamentNum) - 1;
+
+      try {
+        // Load ranking from previous tournament(s)
+        if (previousTournament >= 1) {
+          const rankingResponse = await fetch(`${API_URL}/rankings?categoryId=${categoryId}&season=${season}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+
+          if (rankingResponse.ok) {
+            const rankings = await rankingResponse.json();
+            rankedPlayers = rankings.map((r, index) => ({
+              licence: r.licence,
+              first_name: r.first_name,
+              last_name: r.last_name,
+              club: r.club,
+              rank: r.rank_position,
+              total_match_points: r.total_match_points,
+              isRanked: true
+            }));
+          }
+        } else {
+          // T1 - no previous ranking, would need to use player list
+          rankedPlayers = [];
+        }
+
+        // Load inscriptions using the already-matched tournament
+        if (matchingTournoi) {
+          const inscriptionsResponse = await fetch(`${API_URL}/inscriptions/tournoi/${matchingTournoi.tournoi_id}/inscriptions`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+
+          if (inscriptionsResponse.ok) {
+            const inscriptions = await inscriptionsResponse.json();
+
+            // Find new players (inscribed but not in ranking)
+            const rankedLicences = new Set(rankedPlayers.map(p => p.licence.replace(/\s/g, '')));
+
+            newPlayers = inscriptions
+              .filter(i => !rankedLicences.has(i.licence?.replace(/\s/g, '')) && i.forfait !== 1)
+              .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+              .map((i, index) => ({
+                licence: i.licence,
+                first_name: i.first_name || 'Inconnu',
+                last_name: i.last_name || 'Inconnu',
+                club: i.club || '',
+                timestamp: i.timestamp,
+                isNew: true,
+                forfait: i.forfait
+              }));
+
+            // Mark ranked players who are inscribed or forfait AND auto-select them
+            rankedPlayers.forEach(p => {
+              const inscription = inscriptions.find(i =>
+                i.licence?.replace(/\s/g, '') === p.licence?.replace(/\s/g, '')
+              );
+              if (inscription) {
+                p.isInscribed = true;
+                p.forfait = inscription.forfait === 1;
+                // Auto-select inscribed players (not forfait)
+                if (!p.forfait) {
+                  p.selected = true;
+                }
+              }
+            });
+
+            // Auto-select all new players (they are all inscribed by definition)
+            newPlayers.forEach(p => {
+              p.selected = true;
+            });
+          }
+        } else {
+          // No matching external tournament found - clear new players
+          newPlayers = [];
+        }
+
+        // Load all system players for last minute search (in separate try-catch to avoid breaking main flow)
+        try {
+          const allPlayersResponse = await fetch(`${API_URL}/players`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (allPlayersResponse.ok) {
+            allSystemPlayers = await allPlayersResponse.json();
+          }
+        } catch (e) {
+          console.error('Error loading all players:', e);
+        }
+
+        // Reset last minute players
+        lastMinutePlayers = [];
+        selectedLastMinutePlayer = null;
+
+        renderPlayerLists();
+        goToStep(2);
+
+      } catch (error) {
+        console.error('Error loading players:', error);
+        document.getElementById('errorMessage').textContent = 'Erreur lors du chargement des joueurs';
+        document.getElementById('errorMessage').style.display = 'block';
+      }
+    });
+
+    // Render player lists
+    function renderPlayerLists() {
+      const rankedList = document.getElementById('rankedPlayersList');
+      const newList = document.getElementById('newPlayersList');
+
+      if (rankedPlayers.length === 0) {
+        rankedList.innerHTML = '<p style="padding: 20px; color: #666; text-align: center;">Aucun classement disponible pour ce tournoi</p>';
+      } else {
+        rankedList.innerHTML = rankedPlayers.map((p, index) => `
+          <div class="player-item ${p.selected ? 'selected' : ''} ${p.forfait ? 'forfait' : ''}"
+               data-licence="${p.licence}" data-type="ranked" data-index="${index}">
+            <input type="checkbox" ${p.selected ? 'checked' : ''} ${p.forfait ? 'disabled' : ''}>
+            <span class="player-rank">#${p.rank}</span>
+            <span class="player-name">${p.last_name} ${p.first_name}</span>
+            <span class="player-club">${p.club || ''}</span>
+            <span class="player-licence">${p.licence}</span>
+            ${p.forfait ? '<span class="badge badge-forfait">Forfait</span>' : (p.isInscribed ? '<span class="badge badge-inscrit">Inscrit</span>' : '')}
+          </div>
+        `).join('');
+      }
+
+      if (newPlayers.length === 0) {
+        newList.innerHTML = '<p style="padding: 20px; color: #666; text-align: center;">Aucun nouveau joueur inscrit</p>';
+      } else {
+        newList.innerHTML = newPlayers.map((p, index) => `
+          <div class="player-item new-player ${p.selected ? 'selected' : ''}"
+               data-licence="${p.licence}" data-type="new" data-index="${index}">
+            <input type="checkbox" ${p.selected ? 'checked' : ''}>
+            <span class="player-rank">-</span>
+            <span class="player-name">${p.last_name} ${p.first_name}</span>
+            <span class="player-club">${p.club || ''}</span>
+            <span class="player-licence">${p.licence}</span>
+            <span class="badge badge-new">Nouveau</span>
+          </div>
+        `).join('');
+      }
+
+      // Render last minute players
+      const lastMinuteList = document.getElementById('lastMinutePlayersList');
+      if (lastMinuteList) {
+        if (lastMinutePlayers.length === 0) {
+          lastMinuteList.innerHTML = '';
+        } else {
+          lastMinuteList.innerHTML = lastMinutePlayers.map((p, index) => `
+            <div class="player-item new-player ${p.selected ? 'selected' : ''}"
+                 data-licence="${p.licence}" data-type="lastMinute" data-index="${index}">
+              <input type="checkbox" ${p.selected ? 'checked' : ''}>
+              <span class="player-rank">-</span>
+              <span class="player-name">${p.last_name} ${p.first_name}</span>
+              <span class="player-club">${p.club || ''}</span>
+              <span class="player-licence">${p.licence}</span>
+              <span class="badge" style="background: #dc3545; color: white;">Last minute</span>
+              <button class="btn-remove-lastminute" data-index="${index}" style="margin-left: auto; background: none; border: none; color: #dc3545; cursor: pointer; font-size: 18px;" title="Retirer">×</button>
+            </div>
+          `).join('');
+
+          // Add remove handlers for last minute players
+          lastMinuteList.querySelectorAll('.btn-remove-lastminute').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const idx = parseInt(btn.dataset.index);
+              lastMinutePlayers.splice(idx, 1);
+              renderPlayerLists();
+            });
+          });
+        }
+      }
+
+      // Add click handlers
+      document.querySelectorAll('.player-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          if (e.target.type === 'checkbox') return;
+          if (item.classList.contains('forfait')) return;
+
+          const checkbox = item.querySelector('input[type="checkbox"]');
+          checkbox.checked = !checkbox.checked;
+          togglePlayerSelection(item);
+        });
+
+        item.querySelector('input[type="checkbox"]').addEventListener('change', () => {
+          togglePlayerSelection(item);
+        });
+      });
+
+      updateSelectionSummary();
+    }
+
+    function togglePlayerSelection(item) {
+      const type = item.dataset.type;
+      const index = parseInt(item.dataset.index);
+      const checkbox = item.querySelector('input[type="checkbox"]');
+
+      if (type === 'ranked') {
+        rankedPlayers[index].selected = checkbox.checked;
+      } else if (type === 'lastMinute') {
+        lastMinutePlayers[index].selected = checkbox.checked;
+      } else {
+        newPlayers[index].selected = checkbox.checked;
+      }
+
+      item.classList.toggle('selected', checkbox.checked);
+      updateSelectionSummary();
+    }
+
+    function updateSelectionSummary() {
+      const selectedRanked = rankedPlayers.filter(p => p.selected);
+      const selectedNew = newPlayers.filter(p => p.selected);
+      const selectedLastMinute = lastMinutePlayers.filter(p => p.selected);
+      const totalSelected = selectedRanked.length + selectedNew.length + selectedLastMinute.length;
+
+      document.getElementById('selectedCount').textContent = totalSelected;
+
+      if (totalSelected >= 3) {
+        const config = getPouleConfig(totalSelected);
+        document.getElementById('pouleConfig').textContent = config.description;
+        document.getElementById('tablesNeeded').textContent = config.tables;
+        document.getElementById('validatePlayersBtn').disabled = false;
+      } else {
+        document.getElementById('pouleConfig').textContent = '-';
+        document.getElementById('tablesNeeded').textContent = '-';
+        document.getElementById('validatePlayersBtn').disabled = true;
+      }
+    }
+
+    // Selection buttons
+    document.getElementById('selectAllBtn').addEventListener('click', () => {
+      rankedPlayers.forEach(p => { if (!p.forfait) p.selected = true; });
+      newPlayers.forEach(p => p.selected = true);
+      lastMinutePlayers.forEach(p => p.selected = true);
+      renderPlayerLists();
+    });
+
+    document.getElementById('deselectAllBtn').addEventListener('click', () => {
+      rankedPlayers.forEach(p => p.selected = false);
+      newPlayers.forEach(p => p.selected = false);
+      lastMinutePlayers.forEach(p => p.selected = false);
+      renderPlayerLists();
+    });
+
+    document.getElementById('selectRegisteredBtn').addEventListener('click', () => {
+      rankedPlayers.forEach(p => {
+        p.selected = p.isInscribed && !p.forfait;
+      });
+      newPlayers.forEach(p => p.selected = true);
+      lastMinutePlayers.forEach(p => p.selected = true);
+      renderPlayerLists();
+    });
+
+    // Navigation
+    function goToStep(stepNum) {
+      document.querySelectorAll('.card[id^="step"]').forEach(card => card.style.display = 'none');
+      document.getElementById(`step${stepNum}`).style.display = 'block';
+
+      document.querySelectorAll('.step').forEach((step, index) => {
+        step.classList.remove('active', 'completed');
+        if (index + 1 < stepNum) step.classList.add('completed');
+        if (index + 1 === stepNum) step.classList.add('active');
+      });
+    }
+
+    document.getElementById('backToStep1Btn').addEventListener('click', () => goToStep(1));
+    document.getElementById('backToStep2Btn').addEventListener('click', () => goToStep(2));
+    document.getElementById('backToStep3Btn').addEventListener('click', () => goToStep(3));
+    document.getElementById('newGenerationBtn').addEventListener('click', () => {
+      // Reset state
+      rankedPlayers = [];
+      newPlayers = [];
+      lastMinutePlayers = [];
+      selectedPlayers = [];
+      goToStep(1);
+    });
+
+    // Validate and preview
+    document.getElementById('validatePlayersBtn').addEventListener('click', () => {
+      // Build final player list with re-ranking
+      selectedPlayers = [];
+
+      // First add selected ranked players (maintaining their rank order but re-numbering)
+      let newRank = 1;
+      rankedPlayers.filter(p => p.selected).forEach(p => {
+        selectedPlayers.push({
+          ...p,
+          finalRank: newRank++
+        });
+      });
+
+      // Then add new players sorted by timestamp
+      newPlayers.filter(p => p.selected).forEach(p => {
+        selectedPlayers.push({
+          ...p,
+          finalRank: newRank++
+        });
+      });
+
+      // Then add last minute players
+      lastMinutePlayers.filter(p => p.selected).forEach(p => {
+        selectedPlayers.push({
+          ...p,
+          finalRank: newRank++,
+          isLastMinute: true
+        });
+      });
+
+      // Update summary
+      document.getElementById('summaryCategory').textContent = currentCategory.display_name;
+      document.getElementById('summaryTournament').textContent =
+        currentTournament === '4' ? 'Finale Départementale' : `Tournoi ${currentTournament}`;
+
+      // Add tournament date and lieu from external tournament
+      if (matchingTournoi) {
+        const dateStr = matchingTournoi.debut
+          ? new Date(matchingTournoi.debut).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+          : 'Non définie';
+        document.getElementById('summaryDate').textContent = dateStr;
+        document.getElementById('summaryLieu').textContent = matchingTournoi.lieu || 'Non défini';
+      } else {
+        document.getElementById('summaryDate').textContent = 'Non définie';
+        document.getElementById('summaryLieu').textContent = 'Non défini';
+      }
+
+      document.getElementById('summaryPlayers').textContent = selectedPlayers.length;
+
+      const config = getPouleConfig(selectedPlayers.length);
+      document.getElementById('summaryConfig').textContent = config.description;
+      document.getElementById('summaryTables').textContent = config.tables;
+
+      // Generate poule preview
+      const poules = distributeSerpentine(selectedPlayers, config.poules);
+      renderPoulePreview(poules);
+
+      // Pre-select location from tournament file
+      if (matchingTournoi && matchingTournoi.lieu) {
+        preselectLocation(matchingTournoi.lieu);
+      }
+
+      // Reset second location
+      document.getElementById('location2Container').style.display = 'none';
+      document.getElementById('addLocation2Btn').style.display = 'inline-block';
+      document.getElementById('locationSelect2').value = '';
+
+      goToStep(3);
+    });
+
+    // Store current poules globally for manipulation
+    let currentPoules = [];
+
+    function renderPoulePreview(poules) {
+      currentPoules = poules;
+      const container = document.getElementById('poulePreview');
+      const numPoules = poules.length;
+
+      container.innerHTML = poules.map(poule => `
+        <div class="poule-card" data-poule="${poule.number}">
+          <h4>Poule ${poule.number} (${poule.players.length} joueurs)</h4>
+          ${poule.players.map((p, index) => `
+            <div class="poule-player" data-licence="${p.licence}" data-poule="${poule.number}">
+              <span class="poule-player-rank">${index + 1}.</span>
+              <span style="flex: 1;">${p.last_name} ${p.first_name} <strong style="color: #1F4788;">(${p.finalRank})</strong></span>
+              ${p.isLastMinute ? '<span class="badge" style="background: #dc3545; color: white;">Last minute</span>' : (p.isNew ? '<span class="badge badge-new">Nouveau</span>' : '')}
+              ${numPoules > 1 ? `
+                <select class="move-player-select" data-licence="${p.licence}" data-from-poule="${poule.number}"
+                        style="padding: 2px 5px; font-size: 0.75em; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">
+                  <option value="">Déplacer...</option>
+                  ${poules.filter(op => op.number !== poule.number).map(op =>
+                    `<option value="${op.number}">→ Poule ${op.number}</option>`
+                  ).join('')}
+                </select>
+              ` : ''}
+            </div>
+          `).join('')}
+          <div class="poule-location-select" style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed #ddd;">
+            <select class="poule-location" data-poule="${poule.number}" style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85em;">
+              <option value="1">Lieu 1</option>
+              <option value="2">Lieu 2</option>
+            </select>
+          </div>
+        </div>
+      `).join('');
+
+      // Add move player handlers
+      container.querySelectorAll('.move-player-select').forEach(select => {
+        select.addEventListener('change', (e) => {
+          const licence = select.dataset.licence;
+          const fromPoule = parseInt(select.dataset.fromPoule);
+          const toPoule = parseInt(e.target.value);
+
+          if (toPoule) {
+            movePlayerBetweenPoules(licence, fromPoule, toPoule);
+          }
+          // Reset select
+          select.value = '';
+        });
+      });
+
+      // Update location labels when locations change
+      updatePouleLocationLabels();
+    }
+
+    function movePlayerBetweenPoules(licence, fromPouleNum, toPouleNum) {
+      // Find the player in the source poule
+      const fromPoule = currentPoules.find(p => p.number === fromPouleNum);
+      const toPoule = currentPoules.find(p => p.number === toPouleNum);
+
+      if (!fromPoule || !toPoule) return;
+
+      const playerIndex = fromPoule.players.findIndex(p => p.licence === licence);
+      if (playerIndex === -1) return;
+
+      // Remove from source poule
+      const [player] = fromPoule.players.splice(playerIndex, 1);
+
+      // Add to destination poule
+      toPoule.players.push(player);
+
+      // Re-render
+      renderPoulePreview(currentPoules);
+
+      // Show success message briefly
+      const msg = document.getElementById('successMessage');
+      msg.textContent = `${player.last_name} ${player.first_name} déplacé vers Poule ${toPouleNum}`;
+      msg.style.display = 'block';
+      setTimeout(() => msg.style.display = 'none', 2000);
+    }
+
+    function updatePouleLocationLabels() {
+      const location1Select = document.getElementById('locationSelect1');
+      const location2Select = document.getElementById('locationSelect2');
+      const location2Container = document.getElementById('location2Container');
+
+      const loc1Name = location1Select.value ?
+        location1Select.options[location1Select.selectedIndex]?.text : 'Lieu 1';
+      const loc2Name = location2Select.value ?
+        location2Select.options[location2Select.selectedIndex]?.text : 'Lieu 2';
+
+      const hasSecondLocation = location2Container.style.display !== 'none' && location2Select.value;
+
+      document.querySelectorAll('.poule-location').forEach(select => {
+        select.innerHTML = `
+          <option value="1">${loc1Name || 'Lieu 1'}</option>
+          ${hasSecondLocation ? `<option value="2">${loc2Name || 'Lieu 2'}</option>` : ''}
+        `;
+      });
+    }
+
+    // Generate Excel
+    document.getElementById('generateExcelBtn').addEventListener('click', async () => {
+      const config = getPouleConfig(selectedPlayers.length);
+      // Use currentPoules which may have been modified by moving players
+      const poules = currentPoules.length > 0 ? currentPoules : distributeSerpentine(selectedPlayers, config.poules);
+
+      // Get selected locations and times
+      const location1Select = document.getElementById('locationSelect1');
+      const loc1Option = location1Select.options[location1Select.selectedIndex];
+      const location1 = location1Select.value ? {
+        id: location1Select.value,
+        name: loc1Option.dataset.name,
+        street: loc1Option.dataset.street,
+        city: loc1Option.dataset.city,
+        zip_code: loc1Option.dataset.zipcode,
+        phone: loc1Option.dataset.phone,
+        email: loc1Option.dataset.email,
+        address: loc1Option.dataset.address
+      } : null;
+
+      const location2Select = document.getElementById('locationSelect2');
+      const loc2Option = location2Select.options[location2Select.selectedIndex];
+      const location2 = location2Select.value ? {
+        id: location2Select.value,
+        name: loc2Option.dataset.name,
+        street: loc2Option.dataset.street,
+        city: loc2Option.dataset.city,
+        zip_code: loc2Option.dataset.zipcode,
+        phone: loc2Option.dataset.phone,
+        email: loc2Option.dataset.email,
+        address: loc2Option.dataset.address
+      } : null;
+
+      const startTime1 = document.getElementById('startTime1').value || '14:00';
+      const startTime2 = document.getElementById('startTime2').value || '14:00';
+
+      // Get poule location assignments
+      const pouleAssignments = {};
+      document.querySelectorAll('.poule-location').forEach(select => {
+        const pouleNum = select.dataset.poule;
+        pouleAssignments[pouleNum] = select.value; // '1' or '2'
+      });
+
+      // Add location assignment to each poule
+      poules.forEach(poule => {
+        poule.locationNum = pouleAssignments[poule.number] || '1';
+      });
+
+      try {
+        const response = await fetch(`${API_URL}/inscriptions/generate-poules`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            category: currentCategory,
+            season: currentSeason,
+            tournament: currentTournament,
+            players: selectedPlayers,
+            poules: poules,
+            config: config,
+            tournamentDate: matchingTournoi?.debut || null,
+            tournamentLieu: matchingTournoi?.lieu || null,
+            locations: [
+              location1 ? { ...location1, startTime: startTime1, locationNum: '1' } : null,
+              location2 ? { ...location2, startTime: startTime2, locationNum: '2' } : null
+            ].filter(Boolean)
+          })
+        });
+
+        if (response.ok) {
+          // Download the file
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `Poules_${currentCategory.display_name}_T${currentTournament}_${currentSeason}.xlsx`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(url);
+
+          goToStep(4);
+        } else {
+          const error = await response.json();
+          document.getElementById('errorMessage').textContent = error.error || 'Erreur lors de la génération';
+          document.getElementById('errorMessage').style.display = 'block';
+        }
+      } catch (error) {
+        console.error('Error generating Excel:', error);
+        document.getElementById('errorMessage').textContent = 'Erreur lors de la génération du fichier';
+        document.getElementById('errorMessage').style.display = 'block';
+      }
+    });
+
+    // Last minute player search
+    const lastMinuteSearch = document.getElementById('lastMinuteSearch');
+    const lastMinuteResults = document.getElementById('lastMinuteResults');
+    const addLastMinuteBtn = document.getElementById('addLastMinuteBtn');
+
+    lastMinuteSearch.addEventListener('input', () => {
+      const query = lastMinuteSearch.value.trim().toLowerCase();
+
+      if (query.length < 2) {
+        lastMinuteResults.style.display = 'none';
+        selectedLastMinutePlayer = null;
+        addLastMinuteBtn.disabled = true;
+        return;
+      }
+
+      // Get already selected licences
+      const selectedLicences = new Set([
+        ...rankedPlayers.filter(p => p.selected).map(p => p.licence?.replace(/\s/g, '')),
+        ...newPlayers.filter(p => p.selected).map(p => p.licence?.replace(/\s/g, '')),
+        ...lastMinutePlayers.map(p => p.licence?.replace(/\s/g, ''))
+      ]);
+
+      // Search in all system players
+      const results = allSystemPlayers
+        .filter(p => {
+          const fullName = `${p.last_name} ${p.first_name}`.toLowerCase();
+          const licence = (p.licence || '').toLowerCase();
+          return (fullName.includes(query) || licence.includes(query)) &&
+                 !selectedLicences.has(p.licence?.replace(/\s/g, ''));
+        })
+        .slice(0, 10);
+
+      if (results.length === 0) {
+        lastMinuteResults.innerHTML = '<p style="padding: 10px; color: #666;">Aucun joueur trouvé</p>';
+        lastMinuteResults.style.display = 'block';
+        return;
+      }
+
+      lastMinuteResults.innerHTML = results.map(p => `
+        <div class="search-result-item" data-licence="${p.licence}"
+             style="padding: 10px 15px; border-bottom: 1px solid #eee; cursor: pointer; transition: background 0.2s;">
+          <strong>${p.last_name} ${p.first_name}</strong>
+          <span style="color: #666; margin-left: 10px;">${p.club || ''}</span>
+          <span style="color: #999; margin-left: 10px; font-size: 0.85em;">${p.licence}</span>
+        </div>
+      `).join('');
+
+      lastMinuteResults.style.display = 'block';
+
+      // Add click handlers to search results
+      lastMinuteResults.querySelectorAll('.search-result-item').forEach(item => {
+        item.addEventListener('mouseover', () => item.style.background = '#f5f5f5');
+        item.addEventListener('mouseout', () => {
+          if (selectedLastMinutePlayer?.licence !== item.dataset.licence) {
+            item.style.background = '';
+          }
+        });
+        item.addEventListener('click', () => {
+          // Deselect previous
+          lastMinuteResults.querySelectorAll('.search-result-item').forEach(i => i.style.background = '');
+
+          // Select this one
+          item.style.background = '#e3f2fd';
+          selectedLastMinutePlayer = allSystemPlayers.find(p => p.licence === item.dataset.licence);
+          addLastMinuteBtn.disabled = false;
+        });
+      });
+    });
+
+    addLastMinuteBtn.addEventListener('click', () => {
+      if (!selectedLastMinutePlayer) return;
+
+      // Add to last minute players
+      lastMinutePlayers.push({
+        licence: selectedLastMinutePlayer.licence,
+        first_name: selectedLastMinutePlayer.first_name,
+        last_name: selectedLastMinutePlayer.last_name,
+        club: selectedLastMinutePlayer.club || '',
+        isNew: true,
+        isLastMinute: true,
+        selected: true
+      });
+
+      // Reset search
+      lastMinuteSearch.value = '';
+      lastMinuteResults.style.display = 'none';
+      selectedLastMinutePlayer = null;
+      addLastMinuteBtn.disabled = true;
+
+      renderPlayerLists();
+    });
+  </script>
+</body>
+</html>

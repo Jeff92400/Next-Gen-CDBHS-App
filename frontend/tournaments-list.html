@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Liste des Tournois - Billard Ranking</title>
+  <link rel="icon" type="image/png" href="images/billiard-icon.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="navbar">
+      <h2><img src="images/billiard-icon.png" alt="🎱" style="height: 28px; width: 28px; vertical-align: middle; margin-right: 8px;" onerror="this.style.display='none'; this.nextSibling.style.display='inline';"><span style="display:none;">🎱</span> CDBHS Tournois</h2>
+      <div class="nav-links">
+        <a href="dashboard.html">Accueil</a>
+        <div class="nav-dropdown">
+          <button class="nav-dropdown-btn">Fichiers</button>
+          <div class="nav-dropdown-content">
+            <a href="players-list.html"><span class="nav-icon">👥</span> Joueurs</a>
+            <a href="tournaments-list.html"><span class="nav-icon">🏆</span> Tournois joués</a>
+            <a href="import-external.html"><span class="nav-icon">📋</span> Compétitions & Inscriptions</a>
+            <a href="clubs.html"><span class="nav-icon">🏢</span> Clubs</a>
+          </div>
+        </div>
+        <a href="rankings.html">Classements</a>
+        <a href="tournaments-list.html" class="active">Tournois joués</a>
+        <a href="generate-poules.html">Tournois à jouer</a>
+        <div class="nav-dropdown">
+          <button class="nav-dropdown-btn">Paramètres</button>
+          <div class="nav-dropdown-content">
+            <a href="settings.html"><span class="nav-icon">⚙️</span> Configuration</a>
+            <a href="calendar.html"><span class="nav-icon">📅</span> Calendrier</a>
+          </div>
+        </div>
+        <a href="#" id="logoutBtn" class="nav-logout">Déconnexion</a>
+      </div>
+    </div>
+
+    <div id="errorMessage" class="error" style="display: none;"></div>
+    <div id="successMessage" class="success" style="display: none;"></div>
+
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h3>Tous les Tournois</h3>
+        <button class="btn btn-success admin-only" onclick="window.location.href='import-tournament.html'">
+          Importer un Tournoi
+        </button>
+      </div>
+
+      <div style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
+        <input type="text" id="searchInput" placeholder="🔍 Rechercher par catégorie..." style="flex: 1; min-width: 250px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+
+        <select id="seasonFilter" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          <option value="">Toutes les saisons</option>
+        </select>
+
+        <select id="tournamentNumberFilter" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          <option value="">Tous les tournois</option>
+          <option value="1">Tournoi 1</option>
+          <option value="2">Tournoi 2</option>
+          <option value="3">Tournoi 3</option>
+          <option value="4">Finale</option>
+        </select>
+
+        <button class="btn" onclick="resetFilters()">Réinitialiser</button>
+      </div>
+
+      <div id="loadingTournaments" class="loading">
+        <div class="spinner"></div>
+        Chargement...
+      </div>
+
+      <div id="tournamentsTable" style="display: none;">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th style="cursor: pointer;" onclick="sortTable('display_name')">Catégorie ⬍</th>
+                <th style="cursor: pointer;" onclick="sortTable('tournament_number')">Tournoi ⬍</th>
+                <th style="cursor: pointer;" onclick="sortTable('season')">Saison ⬍</th>
+                <th style="cursor: pointer;" onclick="sortTable('player_count')">Participants ⬍</th>
+                <th style="cursor: pointer;" onclick="sortTable('tournament_date')">Date ⬍</th>
+                <th style="width: 180px; text-align: center;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tournamentsBody"></tbody>
+          </table>
+        </div>
+        <div style="margin-top: 15px; color: #666; font-size: 14px;">
+          <span id="tournamentCount">0</span> tournoi(s) affiché(s)
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = '/api';
+
+    // Check authentication
+    const token = localStorage.getItem('token');
+    if (!token) {
+      window.location.href = 'login.html';
+    }
+
+    // Check user role and show/hide admin elements
+    const userRole = localStorage.getItem('userRole');
+    if (userRole === 'admin') {
+      document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
+    } else {
+      document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+    }
+
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('userRole');
+      localStorage.removeItem('username');
+      window.location.href = 'login.html';
+    });
+
+    let allTournaments = [];
+    let currentSort = { column: 'tournament_date', direction: 'desc' };
+
+    // Load all tournaments
+    async function loadTournaments() {
+      try {
+        const response = await fetch(`${API_URL}/tournaments`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          allTournaments = await response.json();
+
+          // Populate season filter
+          const seasons = [...new Set(allTournaments.map(t => t.season))].sort().reverse();
+          const seasonFilter = document.getElementById('seasonFilter');
+          seasons.forEach(season => {
+            const option = document.createElement('option');
+            option.value = season;
+            option.textContent = season;
+            seasonFilter.appendChild(option);
+          });
+
+          renderTournaments();
+          document.getElementById('loadingTournaments').style.display = 'none';
+          document.getElementById('tournamentsTable').style.display = 'block';
+        }
+      } catch (error) {
+        console.error('Error loading tournaments:', error);
+        document.getElementById('loadingTournaments').innerHTML = '<p style="color: red;">Erreur de chargement des tournois</p>';
+      }
+    }
+
+    // Filter tournaments
+    function filterTournaments() {
+      const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+      const seasonFilter = document.getElementById('seasonFilter').value;
+      const tournamentNumberFilter = document.getElementById('tournamentNumberFilter').value;
+
+      return allTournaments.filter(tournament => {
+        const matchesSearch = tournament.display_name.toLowerCase().includes(searchTerm);
+        const matchesSeason = !seasonFilter || tournament.season === seasonFilter;
+        const matchesTournamentNumber = !tournamentNumberFilter || tournament.tournament_number.toString() === tournamentNumberFilter;
+
+        return matchesSearch && matchesSeason && matchesTournamentNumber;
+      });
+    }
+
+    // Sort tournaments
+    function sortTable(column) {
+      if (currentSort.column === column) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentSort.column = column;
+        currentSort.direction = 'asc';
+      }
+      renderTournaments();
+    }
+
+    // Render tournaments table
+    function renderTournaments() {
+      const filtered = filterTournaments();
+
+      // Sort
+      filtered.sort((a, b) => {
+        let aVal = a[currentSort.column];
+        let bVal = b[currentSort.column];
+
+        // Handle date sorting
+        if (currentSort.column === 'tournament_date') {
+          aVal = aVal ? new Date(aVal) : new Date(0);
+          bVal = bVal ? new Date(bVal) : new Date(0);
+        }
+
+        if (aVal < bVal) return currentSort.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return currentSort.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+
+      const tbody = document.getElementById('tournamentsBody');
+      tbody.innerHTML = '';
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;">Aucun tournoi trouvé</td></tr>';
+      } else {
+        filtered.forEach(tournament => {
+          const row = document.createElement('tr');
+          const tournamentLabel = tournament.tournament_number === 4 ? 'Finale Départementale' : `Tournoi ${tournament.tournament_number}`;
+
+          const deleteBtn = userRole === 'admin'
+            ? `<button class="btn-delete" onclick="deleteTournament(${tournament.id}, '${tournament.display_name} - T${tournament.tournament_number} - ${tournament.season}')" title="Supprimer" style="background: #dc3545; color: white; border: none; padding: 6px 10px; cursor: pointer; border-radius: 4px; font-size: 16px;">🗑️</button>`
+            : '';
+
+          row.innerHTML = `
+            <td>${tournament.display_name}</td>
+            <td>${tournamentLabel}</td>
+            <td>${tournament.season}</td>
+            <td style="text-align: center;">${tournament.player_count}</td>
+            <td>${tournament.tournament_date ? new Date(tournament.tournament_date).toLocaleDateString('fr-FR') : 'N/A'}</td>
+            <td style="text-align: center; padding: 8px;">
+              <button class="btn-view" onclick="viewTournament(${tournament.id})" title="Voir les résultats" style="background: #28a745; color: white; border: none; padding: 6px 10px; cursor: pointer; border-radius: 4px; font-size: 14px; margin-right: 3px;">👁️</button>
+              <button class="btn-export" onclick="exportTournament(${tournament.id})" title="Exporter en Excel" style="background: #007bff; color: white; border: none; padding: 6px 10px; cursor: pointer; border-radius: 4px; font-size: 14px; margin-right: 3px;">📊</button>
+              ${deleteBtn}
+            </td>
+          `;
+
+          tbody.appendChild(row);
+        });
+      }
+
+      document.getElementById('tournamentCount').textContent = filtered.length;
+    }
+
+    // View tournament
+    function viewTournament(id) {
+      window.location.href = `tournament-results.html?id=${id}`;
+    }
+
+    // Export tournament
+    async function exportTournament(id) {
+      try {
+        const response = await fetch(`${API_URL}/tournaments/${id}/export`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Erreur lors de l\'export');
+        }
+
+        // Get filename from Content-Disposition header
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = `Tournoi_${id}.xlsx`; // fallback
+        if (contentDisposition) {
+          const matches = /filename="([^"]+)"/.exec(contentDisposition);
+          if (matches && matches[1]) {
+            filename = matches[1];
+          }
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } catch (error) {
+        console.error('Error exporting tournament:', error);
+        alert('Erreur lors de l\'export Excel');
+      }
+    }
+
+    // Delete tournament
+    async function deleteTournament(id, name) {
+      if (!confirm(`Êtes-vous sûr de vouloir supprimer le tournoi "${name}" ?\n\nCette action supprimera tous les résultats et recalculera les classements.`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_URL}/tournaments/${id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const successDiv = document.getElementById('successMessage');
+          successDiv.textContent = 'Tournoi supprimé avec succès ! Les classements ont été recalculés.';
+          successDiv.style.display = 'block';
+
+          setTimeout(() => {
+            successDiv.style.display = 'none';
+          }, 3000);
+
+          // Reload tournaments
+          await loadTournaments();
+        } else {
+          const errorData = await response.json();
+          alert(`Erreur lors de la suppression: ${errorData.error || 'Erreur inconnue'}`);
+        }
+      } catch (error) {
+        console.error('Error deleting tournament:', error);
+        alert(`Erreur de connexion lors de la suppression du tournoi: ${error.message}`);
+      }
+    }
+
+    // Reset filters
+    function resetFilters() {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('seasonFilter').value = '';
+      document.getElementById('tournamentNumberFilter').value = '';
+      renderTournaments();
+    }
+
+    // Setup event listeners
+    document.getElementById('searchInput').addEventListener('input', renderTournaments);
+    document.getElementById('seasonFilter').addEventListener('change', renderTournaments);
+    document.getElementById('tournamentNumberFilter').addEventListener('change', renderTournaments);
+
+    // Initialize
+    loadTournaments();
+  </script>
+</body>
+</html>

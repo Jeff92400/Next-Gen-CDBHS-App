@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Classements - Billard Ranking</title>
+  <link rel="icon" type="image/png" href="images/billiard-icon.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="navbar">
+      <h2><img src="images/billiard-icon.png" alt="🎱" style="height: 28px; width: 28px; vertical-align: middle; margin-right: 8px;" onerror="this.style.display='none'; this.nextSibling.style.display='inline';"><span style="display:none;">🎱</span> CDBHS Tournois</h2>
+      <div class="nav-links">
+        <a href="dashboard.html">Accueil</a>
+        <div class="nav-dropdown">
+          <button class="nav-dropdown-btn">Fichiers</button>
+          <div class="nav-dropdown-content">
+            <a href="players-list.html"><span class="nav-icon">👥</span> Joueurs</a>
+            <a href="tournaments-list.html"><span class="nav-icon">🏆</span> Tournois joués</a>
+            <a href="import-external.html"><span class="nav-icon">📋</span> Compétitions & Inscriptions</a>
+            <a href="clubs.html"><span class="nav-icon">🏢</span> Clubs</a>
+          </div>
+        </div>
+        <a href="rankings.html" class="active">Classements</a>
+        <a href="tournaments-list.html">Tournois joués</a>
+        <a href="generate-poules.html">Tournois à jouer</a>
+        <div class="nav-dropdown">
+          <button class="nav-dropdown-btn">Paramètres</button>
+          <div class="nav-dropdown-content">
+            <a href="settings.html"><span class="nav-icon">⚙️</span> Configuration</a>
+            <a href="calendar.html"><span class="nav-icon">📅</span> Calendrier</a>
+          </div>
+        </div>
+        <a href="#" id="logoutBtn" class="nav-logout">Déconnexion</a>
+      </div>
+    </div>
+
+    <div id="errorMessage" class="error" style="display: none;"></div>
+
+    <div class="card">
+      <h3>Filtres</h3>
+      <div class="filter-section">
+        <div class="form-group">
+          <label for="seasonSelect">Saison</label>
+          <select id="seasonSelect">
+            <option value="">-- Sélectionner une saison --</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="categorySelect">Catégorie</label>
+          <select id="categorySelect">
+            <option value="">-- Sélectionner une catégorie --</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="display: flex; align-items: flex-end;">
+          <button class="btn btn-success" id="exportBtn" style="margin-top: 0;">
+            📊 Exporter en Excel
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="loadingRankings" class="loading" style="display: none;">
+      <div class="spinner"></div>
+      Chargement des classements...
+    </div>
+
+    <div class="card" id="rankingsCard" style="display: none;">
+      <h3 id="rankingsTitle">Classement</h3>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Position</th>
+              <th>Licence</th>
+              <th>Joueur</th>
+              <th>Club</th>
+              <th>T1</th>
+              <th>T2</th>
+              <th>T3</th>
+              <th>Total Pts Match</th>
+              <th>Total Points</th>
+              <th>Total Reprises</th>
+              <th>Moyenne</th>
+              <th>Meilleure Série</th>
+            </tr>
+          </thead>
+          <tbody id="rankingsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="noDataMessage" style="display: none; text-align: center; padding: 40px; color: #666;">
+      <p style="font-size: 18px;">Aucun classement disponible</p>
+      <p style="margin-top: 10px;">Veuillez sélectionner une saison et une catégorie, puis importer les résultats des tournois.</p>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = '/api';
+
+    // Check authentication
+    const token = localStorage.getItem('token');
+    if (!token) {
+      window.location.href = 'login.html';
+    }
+
+    // Check user role and show/hide admin elements
+    const userRole = localStorage.getItem('userRole');
+    if (userRole === 'admin') {
+      document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
+    } else {
+      document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+    }
+
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('userRole');
+      localStorage.removeItem('username');
+      window.location.href = 'login.html';
+    });
+
+    let currentCategoryId = null;
+    let currentSeason = null;
+
+    // Club data for logos
+    let CLUBS_DATA = [];
+
+    // Normalize club name for matching
+    function normalizeClubName(clubName) {
+      if (!clubName) return '';
+      return clubName.toUpperCase().replace(/[._\s-]/g, '').trim();
+    }
+
+    // Get club info from loaded data
+    function getClubInfo(clubName) {
+      if (!clubName) return null;
+      const normalizedClubName = normalizeClubName(clubName);
+
+      for (const club of CLUBS_DATA) {
+        const normalizedDbName = normalizeClubName(club.name);
+        if (normalizedClubName === normalizedDbName) {
+          return {
+            logo: club.logo_filename,
+            displayName: club.display_name
+          };
+        }
+      }
+      return null;
+    }
+
+    // Get club logo HTML with fallback to text
+    function getClubLogoHTML(clubName) {
+      if (!clubName || clubName === '-') {
+        return '<span style="color: #999;">-</span>';
+      }
+
+      const clubInfo = getClubInfo(clubName);
+      if (!clubInfo || !clubInfo.logo) {
+        return `<span>${clubName}</span>`;
+      }
+
+      const displayName = clubInfo.displayName || clubName;
+      const logoPath = `images/clubs/${clubInfo.logo}`;
+      return `
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <img src="${logoPath}" alt="${displayName}" title="${displayName}" style="height: 24px; width: 24px; vertical-align: middle; object-fit: contain;" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+          <span style="display: none;">${displayName}</span>
+          <span>${displayName}</span>
+        </div>
+      `;
+    }
+
+    // Load seasons
+    async function loadSeasons() {
+      console.log('Loading seasons...');
+      try {
+        const response = await fetch(`${API_URL}/rankings/seasons`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        console.log('Seasons response status:', response.status);
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('Seasons API error:', errorData);
+          return;
+        }
+
+        const seasons = await response.json();
+        console.log('Seasons loaded:', seasons);
+        const select = document.getElementById('seasonSelect');
+
+        // Clear existing options except the placeholder
+        while (select.options.length > 1) {
+          select.remove(1);
+        }
+
+        seasons.forEach(season => {
+          const option = document.createElement('option');
+          option.value = season;
+          option.textContent = season;
+          select.appendChild(option);
+        });
+
+        // Auto-select first season
+        if (seasons.length > 0) {
+          select.value = seasons[0];
+          currentSeason = seasons[0];
+          console.log('Auto-selected season:', currentSeason);
+        }
+      } catch (error) {
+        console.error('Error loading seasons:', error);
+      }
+    }
+
+    // Load categories
+    async function loadCategories() {
+      console.log('Loading categories...');
+      try {
+        const response = await fetch(`${API_URL}/tournaments/categories`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        console.log('Categories response status:', response.status);
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('Categories API error:', errorData);
+          return;
+        }
+
+        const categories = await response.json();
+        console.log('Categories loaded:', categories.length);
+        const select = document.getElementById('categorySelect');
+
+        // Clear existing options except the placeholder
+        while (select.options.length > 1) {
+          select.remove(1);
+        }
+
+        categories.forEach(category => {
+          const option = document.createElement('option');
+          option.value = category.id;
+          option.textContent = category.display_name;
+          select.appendChild(option);
+        });
+
+        // Auto-select first category
+        if (categories.length > 0) {
+          select.value = categories[0].id;
+          currentCategoryId = categories[0].id;
+          console.log('Auto-selected category:', currentCategoryId);
+        }
+      } catch (error) {
+        console.error('Error loading categories:', error);
+      }
+    }
+
+    // Load rankings
+    async function loadRankings() {
+      if (!currentCategoryId || !currentSeason) {
+        document.getElementById('noDataMessage').style.display = 'block';
+        document.getElementById('rankingsCard').style.display = 'none';
+        return;
+      }
+
+      document.getElementById('loadingRankings').style.display = 'block';
+      document.getElementById('rankingsCard').style.display = 'none';
+      document.getElementById('noDataMessage').style.display = 'none';
+
+      console.log('Loading rankings with:', { categoryId: currentCategoryId, season: currentSeason, hasToken: !!token });
+
+      // Load clubs data first
+      try {
+        const clubsResponse = await fetch(`${API_URL}/clubs`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (clubsResponse.ok) {
+          CLUBS_DATA = await clubsResponse.json();
+          console.log('Clubs loaded for rankings:', CLUBS_DATA.length);
+        }
+      } catch (error) {
+        console.warn('Could not load clubs, will show text only:', error);
+      }
+
+      try {
+        const response = await fetch(
+          `${API_URL}/rankings?categoryId=${currentCategoryId}&season=${currentSeason}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        );
+
+        console.log('Response status:', response.status);
+        console.log('Response ok:', response.ok);
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('API Error:', errorData);
+          throw new Error(errorData.error || 'Failed to load rankings');
+        }
+
+        const rankings = await response.json();
+        console.log('Rankings loaded:', rankings.length);
+
+        if (rankings.length === 0) {
+          document.getElementById('loadingRankings').style.display = 'none';
+          document.getElementById('noDataMessage').style.display = 'block';
+          return;
+        }
+
+        // Update title
+        document.getElementById('rankingsTitle').textContent = `Classement ${rankings[0].display_name} - ${currentSeason}`;
+
+        // Populate table
+        const tbody = document.getElementById('rankingsBody');
+        tbody.innerHTML = '';
+
+        rankings.forEach(rank => {
+          const row = document.createElement('tr');
+
+          // Add special class for top 3
+          if (rank.rank_position === 1) row.classList.add('rank-1');
+          if (rank.rank_position === 2) row.classList.add('rank-2');
+          if (rank.rank_position === 3) row.classList.add('rank-3');
+
+          const moyenne = rank.cumulated_reprises > 0
+            ? (rank.cumulated_points / rank.cumulated_reprises).toFixed(3)
+            : '0.000';
+
+          row.innerHTML = `
+              <td style="text-align: center; font-weight: bold;">${rank.rank_position}</td>
+              <td>${rank.licence}</td>
+              <td>
+                <a href="player-history.html?licence=${rank.licence}" class="player-link">
+                  ${rank.first_name} ${rank.last_name}
+                </a>
+              </td>
+              <td></td>
+              <td style="text-align: center;">${rank.tournament_1_points}</td>
+              <td style="text-align: center;">${rank.tournament_2_points}</td>
+              <td style="text-align: center;">${rank.tournament_3_points}</td>
+              <td style="text-align: center; font-weight: bold;">${rank.total_match_points}</td>
+              <td style="text-align: center;">${rank.cumulated_points}</td>
+              <td style="text-align: center;">${rank.cumulated_reprises}</td>
+              <td style="text-align: center;">${moyenne}</td>
+              <td style="text-align: center; font-weight: bold;">${rank.best_serie || 0}</td>
+            `;
+
+            // Set club logo HTML separately
+            const clubCell = row.cells[3];
+            clubCell.innerHTML = getClubLogoHTML(rank.club);
+
+            tbody.appendChild(row);
+          });
+
+        document.getElementById('loadingRankings').style.display = 'none';
+        document.getElementById('rankingsCard').style.display = 'block';
+      } catch (error) {
+        console.error('Error loading rankings:', error);
+        document.getElementById('loadingRankings').style.display = 'none';
+        document.getElementById('errorMessage').textContent = `Erreur: ${error.message}`;
+        document.getElementById('errorMessage').style.display = 'block';
+
+        // If token error, redirect to login
+        if (error.message.includes('token') || error.message.includes('Access')) {
+          setTimeout(() => {
+            localStorage.removeItem('token');
+            window.location.href = 'login.html';
+          }, 2000);
+        }
+      }
+    }
+
+    // Export to Excel
+    document.getElementById('exportBtn').addEventListener('click', async () => {
+      if (!currentCategoryId || !currentSeason) {
+        alert('Veuillez sélectionner une saison et une catégorie');
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `${API_URL}/rankings/export?categoryId=${currentCategoryId}&season=${currentSeason}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        );
+
+        if (response.ok) {
+          // Get filename from Content-Disposition header
+          const contentDisposition = response.headers.get('Content-Disposition');
+          let filename = `Classement_${currentSeason}.xlsx`; // fallback
+          if (contentDisposition) {
+            const matches = /filename="([^"]+)"/.exec(contentDisposition);
+            if (matches && matches[1]) {
+              filename = matches[1];
+            }
+          }
+
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        } else {
+          alert('Erreur lors de l\'export');
+        }
+      } catch (error) {
+        console.error('Export error:', error);
+        alert('Erreur lors de l\'export');
+      }
+    });
+
+    // Event listeners
+    document.getElementById('seasonSelect').addEventListener('change', (e) => {
+      currentSeason = e.target.value;
+      if (currentSeason && currentCategoryId) {
+        loadRankings();
+      }
+    });
+
+    document.getElementById('categorySelect').addEventListener('change', (e) => {
+      currentCategoryId = e.target.value;
+      if (currentSeason && currentCategoryId) {
+        loadRankings();
+      }
+    });
+
+    // Initialize
+    async function initialize() {
+      console.log('=== INITIALIZATION START ===');
+      console.log('Initial currentSeason:', currentSeason);
+      console.log('Initial currentCategoryId:', currentCategoryId);
+
+      // Check for URL parameters
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlCategoryId = urlParams.get('categoryId');
+      const urlSeason = urlParams.get('season');
+
+      await loadSeasons();
+      console.log('After loadSeasons, currentSeason:', currentSeason);
+
+      await loadCategories();
+      console.log('After loadCategories, currentCategoryId:', currentCategoryId);
+
+      // If URL parameters exist, use them instead of auto-selected values
+      if (urlCategoryId) {
+        currentCategoryId = urlCategoryId;
+        document.getElementById('categorySelect').value = urlCategoryId;
+        console.log('Using URL categoryId:', urlCategoryId);
+      }
+
+      if (urlSeason) {
+        currentSeason = urlSeason;
+        document.getElementById('seasonSelect').value = urlSeason;
+        console.log('Using URL season:', urlSeason);
+      }
+
+      console.log('Checking if we should load rankings...');
+      console.log('currentSeason:', currentSeason, 'currentCategoryId:', currentCategoryId);
+
+      if (currentSeason && currentCategoryId) {
+        console.log('Calling loadRankings()');
+        loadRankings();
+      } else {
+        console.log('NOT calling loadRankings - missing season or category');
+        console.log('currentSeason:', currentSeason);
+        console.log('currentCategoryId:', currentCategoryId);
+      }
+      console.log('=== INITIALIZATION END ===');
+    }
+
+    initialize();
+  </script>
+</body>
+</html>

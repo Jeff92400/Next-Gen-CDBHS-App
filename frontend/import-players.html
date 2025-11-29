@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Import Joueurs - Billard Ranking</title>
+  <link rel="icon" type="image/png" href="images/billiard-icon.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="navbar">
+      <h2><img src="images/billiard-icon.png" alt="🎱" style="height: 28px; width: 28px; vertical-align: middle; margin-right: 8px;" onerror="this.style.display='none'; this.nextSibling.style.display='inline';"><span style="display:none;">🎱</span> CDBHS Tournois</h2>
+      <div class="nav-links">
+        <a href="dashboard.html" class="nav-logout" style="background: #667eea !important;">← Accueil</a>
+      </div>
+    </div>
+
+    <div id="errorMessage" class="error" style="display: none;"></div>
+    <div id="successMessage" class="success" style="display: none;"></div>
+
+    <div class="card">
+      <h3>Ajouter un joueur manuellement</h3>
+      <p style="color: #666; margin-bottom: 20px;">
+        Entrez les informations du joueur à ajouter.
+      </p>
+
+      <form id="addPlayerForm">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+          <div>
+            <label for="licence" style="display: block; margin-bottom: 5px; font-weight: 500;">Licence *</label>
+            <input type="text" id="licence" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+          <div>
+            <label for="club" style="display: block; margin-bottom: 5px; font-weight: 500;">Club</label>
+            <input type="text" id="club" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+          <div>
+            <label for="firstName" style="display: block; margin-bottom: 5px; font-weight: 500;">Prénom *</label>
+            <input type="text" id="firstName" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+          <div>
+            <label for="lastName" style="display: block; margin-bottom: 5px; font-weight: 500;">Nom *</label>
+            <input type="text" id="lastName" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+          <div>
+            <label for="rankLibre" style="display: block; margin-bottom: 5px; font-weight: 500;">Classement Libre</label>
+            <input type="text" id="rankLibre" placeholder="NC" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+          <div>
+            <label for="rankCadre" style="display: block; margin-bottom: 5px; font-weight: 500;">Classement Cadre</label>
+            <input type="text" id="rankCadre" placeholder="NC" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+          <div>
+            <label for="rankBande" style="display: block; margin-bottom: 5px; font-weight: 500;">Classement Bande</label>
+            <input type="text" id="rankBande" placeholder="NC" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+          <div>
+            <label for="rank3Bandes" style="display: block; margin-bottom: 5px; font-weight: 500;">Classement 3 Bandes</label>
+            <input type="text" id="rank3Bandes" placeholder="NC" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+        </div>
+        <div style="margin-bottom: 15px;">
+          <label style="display: flex; align-items: center; cursor: pointer;">
+            <input type="checkbox" id="isActive" checked style="margin-right: 8px;">
+            <span>Joueur actif</span>
+          </label>
+        </div>
+
+        <button type="submit" class="btn" id="addPlayerBtn">Ajouter le joueur</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>Importer la liste des joueurs</h3>
+      <p style="color: #666; margin-bottom: 20px;">
+        Sélectionnez le fichier CSV contenant la liste des joueurs avec leurs licences et classements.
+      </p>
+
+      <form id="importForm">
+        <div class="file-upload" id="fileUpload">
+          <p>📁 Cliquez pour sélectionner un fichier CSV</p>
+          <p style="font-size: 12px; color: #999; margin-top: 10px;">ou glissez-déposez le fichier ici</p>
+          <input type="file" id="fileInput" accept=".csv" required>
+          <div id="fileName" class="file-name" style="display: none;"></div>
+        </div>
+
+        <button type="submit" class="btn" id="importBtn">Importer les joueurs</button>
+      </form>
+    </div>
+
+    <div class="card" id="resultsCard" style="display: none;">
+      <h3>Résultats de l'import</h3>
+      <div id="importResults"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = '/api';
+
+    // Check authentication
+    const token = localStorage.getItem('token');
+    if (!token) {
+      window.location.href = 'login.html';
+    }
+
+    // Check user role - this page is admin only
+    const userRole = localStorage.getItem('userRole');
+    if (userRole !== 'admin') {
+      alert('Accès réservé aux administrateurs');
+      window.location.href = 'dashboard.html';
+    }
+
+
+    // File upload handling
+    const fileUpload = document.getElementById('fileUpload');
+    const fileInput = document.getElementById('fileInput');
+    const fileName = document.getElementById('fileName');
+
+    fileUpload.addEventListener('click', () => {
+      fileInput.click();
+    });
+
+    fileUpload.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      fileUpload.style.background = '#f0f0f0';
+    });
+
+    fileUpload.addEventListener('dragleave', () => {
+      fileUpload.style.background = '';
+    });
+
+    fileUpload.addEventListener('drop', (e) => {
+      e.preventDefault();
+      fileUpload.style.background = '';
+
+      if (e.dataTransfer.files.length > 0) {
+        fileInput.files = e.dataTransfer.files;
+        fileName.textContent = e.dataTransfer.files[0].name;
+        fileName.style.display = 'block';
+      }
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length > 0) {
+        fileName.textContent = fileInput.files[0].name;
+        fileName.style.display = 'block';
+      }
+    });
+
+    // Manual player addition
+    document.getElementById('addPlayerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const errorDiv = document.getElementById('errorMessage');
+      const successDiv = document.getElementById('successMessage');
+      const addPlayerBtn = document.getElementById('addPlayerBtn');
+
+      errorDiv.style.display = 'none';
+      successDiv.style.display = 'none';
+
+      const playerData = {
+        licence: document.getElementById('licence').value,
+        club: document.getElementById('club').value,
+        first_name: document.getElementById('firstName').value,
+        last_name: document.getElementById('lastName').value,
+        rank_libre: document.getElementById('rankLibre').value || 'NC',
+        rank_cadre: document.getElementById('rankCadre').value || 'NC',
+        rank_bande: document.getElementById('rankBande').value || 'NC',
+        rank_3bandes: document.getElementById('rank3Bandes').value || 'NC',
+        is_active: document.getElementById('isActive').checked ? 1 : 0
+      };
+
+      addPlayerBtn.disabled = true;
+      addPlayerBtn.textContent = 'Ajout en cours...';
+
+      try {
+        const response = await fetch(`${API_URL}/players`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(playerData)
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          successDiv.textContent = `Joueur ${data.message === 'Player updated' ? 'mis à jour' : 'ajouté'} avec succès !`;
+          successDiv.style.display = 'block';
+
+          // Reset form
+          document.getElementById('addPlayerForm').reset();
+          document.getElementById('isActive').checked = true;
+        } else {
+          errorDiv.textContent = data.error || 'Erreur lors de l\'ajout du joueur';
+          errorDiv.style.display = 'block';
+        }
+      } catch (error) {
+        errorDiv.textContent = 'Erreur de connexion au serveur';
+        errorDiv.style.display = 'block';
+      } finally {
+        addPlayerBtn.disabled = false;
+        addPlayerBtn.textContent = 'Ajouter le joueur';
+      }
+    });
+
+    // Form submission
+    document.getElementById('importForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const errorDiv = document.getElementById('errorMessage');
+      const successDiv = document.getElementById('successMessage');
+      const importBtn = document.getElementById('importBtn');
+
+      errorDiv.style.display = 'none';
+      successDiv.style.display = 'none';
+
+      if (!fileInput.files[0]) {
+        errorDiv.textContent = 'Veuillez sélectionner un fichier';
+        errorDiv.style.display = 'block';
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+
+      importBtn.disabled = true;
+      importBtn.textContent = 'Import en cours...';
+
+      try {
+        const response = await fetch(`${API_URL}/players/import`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          successDiv.textContent = `Import réussi ! ${data.imported} joueurs importés, ${data.updated} mis à jour.`;
+          successDiv.style.display = 'block';
+
+          // Show results
+          const resultsCard = document.getElementById('resultsCard');
+          const resultsDiv = document.getElementById('importResults');
+
+          resultsDiv.innerHTML = `
+            <div class="stats-grid">
+              <div class="stat-card">
+                <h4>Nouveaux joueurs</h4>
+                <div class="stat-value">${data.imported}</div>
+              </div>
+              <div class="stat-card">
+                <h4>Joueurs mis à jour</h4>
+                <div class="stat-value">${data.updated}</div>
+              </div>
+            </div>
+          `;
+
+          if (data.errors && data.errors.length > 0) {
+            resultsDiv.innerHTML += `
+              <div class="error">
+                <strong>Erreurs rencontrées :</strong>
+                <ul style="margin-top: 10px;">
+                  ${data.errors.slice(0, 10).map(err => `<li>${err.licence || err.record}: ${err.error}</li>`).join('')}
+                </ul>
+              </div>
+            `;
+          }
+
+          resultsCard.style.display = 'block';
+
+          // Reset form
+          fileInput.value = '';
+          fileName.style.display = 'none';
+        } else {
+          errorDiv.textContent = data.error || 'Erreur lors de l\'import';
+          errorDiv.style.display = 'block';
+        }
+      } catch (error) {
+        errorDiv.textContent = 'Erreur de connexion au serveur';
+        errorDiv.style.display = 'block';
+      } finally {
+        importBtn.disabled = false;
+        importBtn.textContent = 'Importer les joueurs';
+      }
+    });
+  </script>
+</body>
+</html>
