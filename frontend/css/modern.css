@@ -391,8 +391,8 @@ body {
 .stat-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-lg);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
   transition: all var(--transition-normal);
   position: relative;
   overflow: hidden;
@@ -423,12 +423,12 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   background: var(--primary-light);
-  border-radius: var(--radius-md);
-  font-size: var(--text-2xl);
-  margin-bottom: var(--space-md);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xl);
+  margin-bottom: var(--space-sm);
 }
 
 .stat-card-label {
@@ -439,10 +439,10 @@ body {
 }
 
 .stat-card-value {
-  font-size: var(--text-3xl);
+  font-size: var(--text-2xl);
   font-weight: 700;
   color: var(--text-primary);
-  letter-spacing: -1px;
+  letter-spacing: -0.5px;
 }
 
 .stat-card-change {
@@ -847,10 +847,10 @@ tbody tr:last-child td {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: var(--space-lg);
+  padding: var(--space-md);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all var(--transition-fast);
   text-decoration: none;
@@ -867,12 +867,12 @@ tbody tr:last-child td {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
   background: var(--primary-light);
-  border-radius: var(--radius-md);
-  font-size: var(--text-2xl);
-  margin-bottom: var(--space-md);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xl);
+  margin-bottom: var(--space-sm);
   transition: all var(--transition-fast);
 }
 
