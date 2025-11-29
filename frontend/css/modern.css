@@ -22,8 +22,8 @@
   --background: #E8E8ED;
   --surface: #FFFFFF;
   --surface-secondary: #F5F5F7;
-  --border: rgba(0, 0, 0, 0.08);
-  --border-strong: rgba(0, 0, 0, 0.12);
+  --border: rgba(0, 0, 0, 0.12);
+  --border-strong: rgba(0, 0, 0, 0.18);
 
   /* Text Colors */
   --text-primary: #1D1D1F;
@@ -170,9 +170,15 @@ body {
   padding: var(--space-md) var(--space-lg);
   background: var(--surface);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
   margin-bottom: var(--space-lg);
-  transition: background var(--transition-normal);
+  transition: all var(--transition-normal);
+}
+
+.nav-header:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--primary);
 }
 
 .nav-brand {
