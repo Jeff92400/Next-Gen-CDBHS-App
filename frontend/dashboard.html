@@ -24,38 +24,57 @@
       margin-top: var(--space-xs);
     }
 
-    .welcome-banner {
-      background: linear-gradient(135deg, var(--primary) 0%, #5856D6 100%);
-      border-radius: var(--radius-lg);
-      padding: var(--space-lg);
-      color: white;
+    /* Compact Stats Bar */
+    .stats-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: var(--space-md) var(--space-lg);
       margin-bottom: var(--space-lg);
-      position: relative;
-      overflow: hidden;
     }
 
-    .welcome-banner::before {
-      content: '';
-      position: absolute;
-      top: -50%;
-      right: -20%;
-      width: 400px;
-      height: 400px;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 50%;
+    .stats-bar-item {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
     }
 
-    .welcome-banner h2 {
+    .stats-bar-icon {
+      font-size: var(--text-lg);
+    }
+
+    .stats-bar-value {
       font-size: var(--text-xl);
-      font-weight: 600;
-      margin-bottom: var(--space-xs);
-      position: relative;
+      font-weight: 700;
+      color: var(--text-primary);
     }
 
-    .welcome-banner p {
-      opacity: 0.9;
-      font-size: var(--text-sm);
-      position: relative;
+    .stats-bar-label {
+      font-size: var(--text-xs);
+      color: var(--text-secondary);
+    }
+
+    .stats-bar-divider {
+      width: 1px;
+      height: 32px;
+      background: var(--border);
+    }
+
+    @media (max-width: 768px) {
+      .stats-bar {
+        flex-wrap: wrap;
+        gap: var(--space-md);
+      }
+      .stats-bar-divider {
+        display: none;
+      }
+      .stats-bar-item {
+        flex: 1 1 45%;
+        justify-content: center;
+      }
     }
 
     .section-header {
@@ -221,33 +240,30 @@
         <span id="successText"></span>
       </div>
 
-      <!-- Welcome Banner -->
-      <div class="welcome-banner">
-        <h2>Bienvenue sur CDBHS</h2>
-        <p>Gérez les joueurs, tournois et classements du Comité Départemental de Billard des Hauts-de-Seine</p>
-      </div>
-
-      <!-- Stats Grid -->
-      <div class="stats-grid stagger-animation">
-        <div class="stat-card">
-          <div class="stat-card-icon">👥</div>
-          <div class="stat-card-label">Joueurs Actifs</div>
-          <div class="stat-card-value" id="activePlayerCount">-</div>
+      <!-- Compact Stats Bar -->
+      <div class="stats-bar">
+        <div class="stats-bar-item">
+          <span class="stats-bar-icon">👥</span>
+          <span class="stats-bar-value" id="activePlayerCount">-</span>
+          <span class="stats-bar-label">Joueurs actifs</span>
         </div>
-        <div class="stat-card">
-          <div class="stat-card-icon">🎱</div>
-          <div class="stat-card-label">Total Joueurs</div>
-          <div class="stat-card-value" id="totalPlayerCount">-</div>
+        <div class="stats-bar-divider"></div>
+        <div class="stats-bar-item">
+          <span class="stats-bar-icon">🎱</span>
+          <span class="stats-bar-value" id="totalPlayerCount">-</span>
+          <span class="stats-bar-label">Total joueurs</span>
         </div>
-        <div class="stat-card">
-          <div class="stat-card-icon">🏆</div>
-          <div class="stat-card-label">Compétitions Importées</div>
-          <div class="stat-card-value" id="tournamentCount">-</div>
+        <div class="stats-bar-divider"></div>
+        <div class="stats-bar-item">
+          <span class="stats-bar-icon">🏆</span>
+          <span class="stats-bar-value" id="tournamentCount">-</span>
+          <span class="stats-bar-label">Compétitions</span>
         </div>
-        <div class="stat-card">
-          <div class="stat-card-icon">📊</div>
-          <div class="stat-card-label">Catégories</div>
-          <div class="stat-card-value">13</div>
+        <div class="stats-bar-divider"></div>
+        <div class="stats-bar-item">
+          <span class="stats-bar-icon">📊</span>
+          <span class="stats-bar-value">13</span>
+          <span class="stats-bar-label">Catégories</span>
         </div>
       </div>
 
