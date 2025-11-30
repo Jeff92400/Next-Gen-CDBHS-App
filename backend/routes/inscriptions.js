@@ -254,8 +254,9 @@ router.get('/tournoi', authenticateToken, (req, res) => {
   const conditions = [];
 
   if (mode) {
-    // Case-insensitive matching for mode
-    conditions.push(`UPPER(mode) = UPPER($${params.length + 1})`);
+    // Case-insensitive matching for mode, ignoring spaces
+    // This handles "3BANDES" matching "3 bandes" or "3 BANDES"
+    conditions.push(`UPPER(REPLACE(mode, ' ', '')) = UPPER(REPLACE($${params.length + 1}, ' ', ''))`);
     params.push(mode);
   }
   if (categorie) {
