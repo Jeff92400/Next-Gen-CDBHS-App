@@ -220,7 +220,7 @@
     // Load tournois
     async function loadTournois() {
       try {
-        const response = await fetch(`${API_URL}/tournois-ext`, {
+        const response = await fetch(`${API_URL}/inscriptions/tournois-ext`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -471,7 +471,7 @@
     // Update tournoi
     async function updateTournoi(data) {
       try {
-        const response = await fetch(`${API_URL}/tournois-ext/${data.tournoi_id}`, {
+        const response = await fetch(`${API_URL}/inscriptions/tournois-ext/${data.tournoi_id}`, {
           method: 'PUT',
           headers: {
             'Authorization': `Bearer ${token}`,

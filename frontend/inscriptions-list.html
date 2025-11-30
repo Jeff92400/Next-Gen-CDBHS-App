@@ -216,7 +216,7 @@
     // Load tournois for filter and display
     async function loadTournois() {
       try {
-        const response = await fetch(`${API_URL}/tournois-ext`, {
+        const response = await fetch(`${API_URL}/inscriptions/tournois-ext`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -271,7 +271,7 @@
     // Load inscriptions
     async function loadInscriptions() {
       try {
-        const response = await fetch(`${API_URL}/inscriptions-ext`, {
+        const response = await fetch(`${API_URL}/inscriptions/inscriptions-ext`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -512,7 +512,7 @@
     // Update inscription
     async function updateInscription(data) {
       try {
-        const response = await fetch(`${API_URL}/inscriptions-ext/${data.inscription_id}`, {
+        const response = await fetch(`${API_URL}/inscriptions/inscriptions-ext/${data.inscription_id}`, {
           method: 'PUT',
           headers: {
             'Authorization': `Bearer ${token}`,
