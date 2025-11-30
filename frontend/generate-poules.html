@@ -600,6 +600,9 @@
       document.getElementById('inscriptionWarning').style.display = 'none';
       document.getElementById('stepIndicatorContainer').style.display = 'flex';
       document.getElementById('step1').style.display = 'block';
+      // Show and load upcoming tournaments
+      document.getElementById('upcomingTournamentsCard').style.display = 'block';
+      loadUpcomingTournaments();
     });
 
     // State
@@ -874,14 +877,6 @@
         alert(`Impossible de trouver la catégorie correspondante pour ${mode} - ${categorie}`);
       }
     }
-
-    // Load upcoming tournaments on page load (after skip warning)
-    document.getElementById('skipInscriptionUpdate').addEventListener('click', () => {
-      document.getElementById('inscriptionWarning').style.display = 'none';
-      document.getElementById('stepIndicatorContainer').style.display = 'flex';
-      document.getElementById('step1').style.display = 'block';
-      loadUpcomingTournaments();
-    });
 
     // Load clubs for location selection
     async function loadClubs() {
