@@ -204,6 +204,18 @@ async function initializeDatabase() {
       )
     `);
 
+    // Import history table - tracks all file imports from IONOS
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS import_history (
+        id SERIAL PRIMARY KEY,
+        file_type TEXT NOT NULL,
+        import_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        record_count INTEGER DEFAULT 0,
+        filename TEXT,
+        imported_by TEXT
+      )
+    `);
+
     await client.query('COMMIT');
 
     // Initialize default admin (legacy)

@@ -111,6 +111,15 @@ router.post('/import', authenticateToken, upload.single('file'), async (req, res
         return res.status(500).json({ error: 'Error finalizing import' });
       }
 
+      // Record import in history
+      const historyQuery = `
+        INSERT INTO import_history (file_type, record_count, filename, imported_by)
+        VALUES ($1, $2, $3, $4)
+      `;
+      db.run(historyQuery, ['joueurs', records.length, req.file.originalname, req.user?.username || 'unknown'], (histErr) => {
+        if (histErr) console.error('Error recording import history:', histErr);
+      });
+
       res.json({
         message: 'Import completed',
         imported,
