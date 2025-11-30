@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Liste des Inscriptions - Billard Ranking</title>
+  <link rel="icon" type="image/png" href="images/billiard-icon.png">
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    .filter-bar {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .filter-bar select, .filter-bar input {
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .filter-bar select {
+      min-width: 150px;
+    }
+    .filter-bar input[type="text"] {
+      flex: 1;
+      min-width: 200px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: bold;
+    }
+    .badge-convoque { background: #e8f5e9; color: #2e7d32; }
+    .badge-non-convoque { background: #fff3e0; color: #e65100; }
+    .badge-forfait { background: #ffebee; color: #c62828; }
+    .badge-libre { background: #e3f2fd; color: #1565c0; }
+    .badge-cadre { background: #fff3e0; color: #e65100; }
+    .badge-bande { background: #f3e5f5; color: #7b1fa2; }
+    .badge-3bandes { background: #e8f5e9; color: #2e7d32; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="navbar">
+      <h2><img src="images/billiard-icon.png" alt="🎱" style="height: 28px; width: 28px; vertical-align: middle; margin-right: 8px;" onerror="this.style.display='none'; this.nextSibling.style.display='inline';"><span style="display:none;">🎱</span> Liste des Inscriptions</h2>
+      <div class="nav-links">
+        <a href="dashboard.html">Accueil</a>
+        <a href="tournois-list.html">Tournois</a>
+        <a href="inscriptions-list.html" class="active">Inscriptions</a>
+        <a href="players-list.html">Joueurs</a>
+        <a href="rankings.html">Classements</a>
+        <a href="#" id="logoutBtn">Déconnexion</a>
+      </div>
+    </div>
+
+    <div id="errorMessage" class="error" style="display: none;"></div>
+
+    <div class="stats-grid" style="margin-bottom: 20px;">
+      <div class="stat-card">
+        <h4>Total Inscriptions</h4>
+        <div class="stat-value" id="totalCount">-</div>
+      </div>
+      <div class="stat-card">
+        <h4>Convoqués</h4>
+        <div class="stat-value" id="convoqueCount">-</div>
+      </div>
+      <div class="stat-card">
+        <h4>Forfaits</h4>
+        <div class="stat-value" id="forfaitCount">-</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Inscriptions aux tournois (IONOS)</h3>
+
+      <div class="filter-bar">
+        <select id="seasonFilter">
+          <option value="">Toutes les saisons</option>
+        </select>
+        <select id="tournoiFilter">
+          <option value="">Tous les tournois</option>
+        </select>
+        <select id="statusFilter">
+          <option value="">Tous les statuts</option>
+          <option value="convoque">Convoqués</option>
+          <option value="non-convoque">Non convoqués</option>
+          <option value="forfait">Forfaits</option>
+        </select>
+        <input type="text" id="searchInput" placeholder="🔍 Rechercher par licence ou email...">
+      </div>
+
+      <div id="loadingInscriptions" class="loading">
+        <div class="spinner"></div>
+        Chargement des inscriptions...
+      </div>
+
+      <div id="inscriptionsTable" style="display: none;">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Licence</th>
+                <th>Tournoi</th>
+                <th>Mode</th>
+                <th>Catégorie</th>
+                <th>Email</th>
+                <th>Téléphone</th>
+                <th>Statut</th>
+                <th>Date inscription</th>
+                <th class="admin-only">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="inscriptionsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Inscription Modal -->
+    <div id="editInscriptionModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+      <div style="background: white; padding: 30px; border-radius: 12px; max-width: 500px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+        <h3 style="margin-top: 0;">✏️ Modifier l'inscription</h3>
+        <form id="editInscriptionForm">
+          <input type="hidden" id="edit_inscription_id">
+
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">ID Inscription</label>
+            <input type="text" id="edit_inscription_id_display" readonly style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; background: #f5f5f5;">
+          </div>
+
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Licence</label>
+            <input type="text" id="edit_licence" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Email</label>
+            <input type="email" id="edit_email" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Téléphone</label>
+            <input type="text" id="edit_telephone" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+            <div>
+              <label style="display: block; margin-bottom: 5px; font-weight: bold;">Convoqué</label>
+              <select id="edit_convoque" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                <option value="0">Non</option>
+                <option value="1">Oui</option>
+              </select>
+            </div>
+            <div>
+              <label style="display: block; margin-bottom: 5px; font-weight: bold;">Forfait</label>
+              <select id="edit_forfait" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                <option value="0">Non</option>
+                <option value="1">Oui</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Commentaire</label>
+            <textarea id="edit_commentaire" rows="3" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;"></textarea>
+          </div>
+
+          <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button type="submit" class="btn" style="flex: 1; background: #4CAF50;">Enregistrer</button>
+            <button type="button" id="cancelEditBtn" class="btn" style="flex: 1; background: #999;">Annuler</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = '/api';
+
+    // Check authentication
+    const token = localStorage.getItem('token');
+    if (!token) {
+      window.location.href = 'login.html';
+    }
+
+    // Get user role from JWT token
+    let userRole = 'viewer';
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      userRole = payload.role || (payload.admin ? 'admin' : 'viewer');
+    } catch (e) {
+      console.error('Error decoding token:', e);
+    }
+
+    const isAdmin = userRole === 'admin';
+
+    // Hide admin-only elements for non-admin users
+    if (!isAdmin) {
+      document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+    }
+
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      window.location.href = 'login.html';
+    });
+
+    let allInscriptions = [];
+    let allTournois = [];
+
+    // Load tournois for filter and display
+    async function loadTournois() {
+      try {
+        const response = await fetch(`${API_URL}/tournois-ext`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          allTournois = await response.json();
+          populateTournoiFilter();
+        }
+      } catch (error) {
+        console.error('Error loading tournois:', error);
+      }
+    }
+
+    // Populate tournoi filter
+    function populateTournoiFilter() {
+      const select = document.getElementById('tournoiFilter');
+
+      // Group by mode/categorie
+      const grouped = {};
+      allTournois.forEach(t => {
+        const key = `${t.mode} - ${t.categorie}`;
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(t);
+      });
+
+      Object.keys(grouped).sort().forEach(key => {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = key;
+
+        grouped[key].sort((a, b) => {
+          const dateA = a.debut ? new Date(a.debut) : new Date(0);
+          const dateB = b.debut ? new Date(b.debut) : new Date(0);
+          return dateB - dateA;
+        }).forEach(t => {
+          const option = document.createElement('option');
+          option.value = t.tournoi_id;
+          const date = t.debut ? new Date(t.debut).toLocaleDateString('fr-FR') : '';
+          option.textContent = `${t.nom} ${date ? `(${date})` : ''}`;
+          optgroup.appendChild(option);
+        });
+
+        select.appendChild(optgroup);
+      });
+    }
+
+    // Get tournoi info by ID
+    function getTournoiById(tournoiId) {
+      return allTournois.find(t => t.tournoi_id === tournoiId) || {};
+    }
+
+    // Load inscriptions
+    async function loadInscriptions() {
+      try {
+        const response = await fetch(`${API_URL}/inscriptions-ext`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to load inscriptions');
+        }
+
+        allInscriptions = await response.json();
+
+        // Populate season filter
+        populateSeasonFilter();
+
+        // Calculate stats
+        const convoques = allInscriptions.filter(i => i.convoque === 1);
+        const forfaits = allInscriptions.filter(i => i.forfait === 1);
+
+        document.getElementById('totalCount').textContent = allInscriptions.length;
+        document.getElementById('convoqueCount').textContent = convoques.length;
+        document.getElementById('forfaitCount').textContent = forfaits.length;
+
+        displayInscriptions(allInscriptions);
+
+        document.getElementById('loadingInscriptions').style.display = 'none';
+        document.getElementById('inscriptionsTable').style.display = 'block';
+
+      } catch (error) {
+        console.error('Error loading inscriptions:', error);
+        document.getElementById('loadingInscriptions').style.display = 'none';
+        document.getElementById('errorMessage').textContent = 'Erreur lors du chargement des inscriptions';
+        document.getElementById('errorMessage').style.display = 'block';
+      }
+    }
+
+    // Populate season filter
+    function populateSeasonFilter() {
+      const seasons = new Set();
+
+      allInscriptions.forEach(i => {
+        const tournoi = getTournoiById(i.tournoi_id);
+        if (tournoi.debut) {
+          const date = new Date(tournoi.debut);
+          const year = date.getFullYear();
+          const month = date.getMonth();
+          const seasonStart = month >= 8 ? year : year - 1;
+          seasons.add(`${seasonStart}-${seasonStart + 1}`);
+        }
+      });
+
+      const select = document.getElementById('seasonFilter');
+      const sortedSeasons = Array.from(seasons).sort().reverse();
+
+      sortedSeasons.forEach(season => {
+        const option = document.createElement('option');
+        option.value = season;
+        option.textContent = `Saison ${season}`;
+        select.appendChild(option);
+      });
+
+      // Select current season by default
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear();
+      const currentMonth = currentDate.getMonth();
+      const currentSeasonStart = currentMonth >= 8 ? currentYear : currentYear - 1;
+      const currentSeason = `${currentSeasonStart}-${currentSeasonStart + 1}`;
+
+      if (sortedSeasons.includes(currentSeason)) {
+        select.value = currentSeason;
+        applyFilters();
+      }
+    }
+
+    // Get mode badge class
+    function getModeBadgeClass(mode) {
+      const modeUpper = (mode || '').toUpperCase();
+      if (modeUpper.includes('LIBRE')) return 'badge-libre';
+      if (modeUpper.includes('CADRE')) return 'badge-cadre';
+      if (modeUpper.includes('3') || modeUpper.includes('TROIS')) return 'badge-3bandes';
+      if (modeUpper.includes('BANDE')) return 'badge-bande';
+      return '';
+    }
+
+    // Format date
+    function formatDate(dateStr) {
+      if (!dateStr) return '-';
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('fr-FR');
+    }
+
+    // Format datetime
+    function formatDateTime(dateStr) {
+      if (!dateStr) return '-';
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('fr-FR') + ' ' + date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    // Get status badge
+    function getStatusBadge(inscription) {
+      if (inscription.forfait === 1) {
+        return '<span class="badge badge-forfait">Forfait</span>';
+      }
+      if (inscription.convoque === 1) {
+        return '<span class="badge badge-convoque">Convoqué</span>';
+      }
+      return '<span class="badge badge-non-convoque">Inscrit</span>';
+    }
+
+    // Display inscriptions in table
+    function displayInscriptions(inscriptions) {
+      const tbody = document.getElementById('inscriptionsBody');
+      tbody.innerHTML = '';
+
+      if (inscriptions.length === 0) {
+        const colspan = isAdmin ? 10 : 9;
+        tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center; padding: 20px;">Aucune inscription trouvée</td></tr>`;
+        return;
+      }
+
+      // Sort by timestamp (most recent first)
+      inscriptions.sort((a, b) => {
+        const dateA = a.timestamp ? new Date(a.timestamp) : new Date(0);
+        const dateB = b.timestamp ? new Date(b.timestamp) : new Date(0);
+        return dateB - dateA;
+      });
+
+      inscriptions.forEach(inscription => {
+        const tournoi = getTournoiById(inscription.tournoi_id);
+        const row = document.createElement('tr');
+
+        if (inscription.forfait === 1) {
+          row.style.opacity = '0.6';
+          row.style.textDecoration = 'line-through';
+        }
+
+        row.innerHTML = `
+          <td>${inscription.inscription_id}</td>
+          <td><strong>${inscription.licence || '-'}</strong></td>
+          <td>${tournoi.nom || `Tournoi #${inscription.tournoi_id}`}</td>
+          <td><span class="badge ${getModeBadgeClass(tournoi.mode)}">${tournoi.mode || '-'}</span></td>
+          <td>${tournoi.categorie || '-'}</td>
+          <td>${inscription.email || '-'}</td>
+          <td>${inscription.telephone || '-'}</td>
+          <td>${getStatusBadge(inscription)}</td>
+          <td>${formatDateTime(inscription.timestamp)}</td>
+          ${isAdmin ? `
+          <td style="text-align: center;">
+            <button class="btn btn-small edit-inscription-btn" style="background: #4CAF50; padding: 5px 10px; font-size: 12px;">✏️</button>
+          </td>
+          ` : ''}
+        `;
+
+        tbody.appendChild(row);
+
+        // Add click event to edit button (only for admin)
+        if (isAdmin) {
+          const editBtn = row.querySelector('.edit-inscription-btn');
+          if (editBtn) {
+            editBtn.onclick = (e) => {
+              e.stopPropagation();
+              openEditModal(inscription);
+            };
+          }
+        }
+      });
+    }
+
+    // Apply filters
+    function applyFilters() {
+      const seasonFilter = document.getElementById('seasonFilter').value;
+      const tournoiFilter = document.getElementById('tournoiFilter').value;
+      const statusFilter = document.getElementById('statusFilter').value;
+      const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+
+      let filtered = allInscriptions;
+
+      // Season filter
+      if (seasonFilter) {
+        const [startYear] = seasonFilter.split('-').map(Number);
+        filtered = filtered.filter(i => {
+          const tournoi = getTournoiById(i.tournoi_id);
+          if (!tournoi.debut) return false;
+          const date = new Date(tournoi.debut);
+          const year = date.getFullYear();
+          const month = date.getMonth();
+          const tournoiSeasonStart = month >= 8 ? year : year - 1;
+          return tournoiSeasonStart === startYear;
+        });
+      }
+
+      // Tournoi filter
+      if (tournoiFilter) {
+        filtered = filtered.filter(i => i.tournoi_id === parseInt(tournoiFilter));
+      }
+
+      // Status filter
+      if (statusFilter) {
+        if (statusFilter === 'convoque') {
+          filtered = filtered.filter(i => i.convoque === 1 && i.forfait !== 1);
+        } else if (statusFilter === 'non-convoque') {
+          filtered = filtered.filter(i => i.convoque !== 1 && i.forfait !== 1);
+        } else if (statusFilter === 'forfait') {
+          filtered = filtered.filter(i => i.forfait === 1);
+        }
+      }
+
+      // Search filter
+      if (searchTerm) {
+        filtered = filtered.filter(i =>
+          (i.licence || '').toLowerCase().includes(searchTerm) ||
+          (i.email || '').toLowerCase().includes(searchTerm) ||
+          (i.telephone || '').toLowerCase().includes(searchTerm)
+        );
+      }
+
+      displayInscriptions(filtered);
+    }
+
+    // Open edit modal
+    function openEditModal(inscription) {
+      document.getElementById('edit_inscription_id').value = inscription.inscription_id;
+      document.getElementById('edit_inscription_id_display').value = inscription.inscription_id;
+      document.getElementById('edit_licence').value = inscription.licence || '';
+      document.getElementById('edit_email').value = inscription.email || '';
+      document.getElementById('edit_telephone').value = inscription.telephone || '';
+      document.getElementById('edit_convoque').value = inscription.convoque || 0;
+      document.getElementById('edit_forfait').value = inscription.forfait || 0;
+      document.getElementById('edit_commentaire').value = inscription.commentaire || '';
+
+      document.getElementById('editInscriptionModal').style.display = 'flex';
+    }
+
+    // Close edit modal
+    function closeEditModal() {
+      document.getElementById('editInscriptionModal').style.display = 'none';
+    }
+
+    // Update inscription
+    async function updateInscription(data) {
+      try {
+        const response = await fetch(`${API_URL}/inscriptions-ext/${data.inscription_id}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to update inscription');
+        }
+
+        return true;
+      } catch (error) {
+        console.error('Error updating inscription:', error);
+        alert('Erreur lors de la mise à jour: ' + error.message);
+        return false;
+      }
+    }
+
+    // Edit form submission
+    document.getElementById('editInscriptionForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const data = {
+        inscription_id: parseInt(document.getElementById('edit_inscription_id').value),
+        licence: document.getElementById('edit_licence').value || null,
+        email: document.getElementById('edit_email').value || null,
+        telephone: document.getElementById('edit_telephone').value || null,
+        convoque: parseInt(document.getElementById('edit_convoque').value),
+        forfait: parseInt(document.getElementById('edit_forfait').value),
+        commentaire: document.getElementById('edit_commentaire').value || null
+      };
+
+      const success = await updateInscription(data);
+      if (success) {
+        closeEditModal();
+        await loadInscriptions();
+        alert('Inscription mise à jour avec succès!');
+      }
+    });
+
+    // Cancel button
+    document.getElementById('cancelEditBtn').addEventListener('click', closeEditModal);
+
+    // Filter event listeners
+    document.getElementById('seasonFilter').addEventListener('change', applyFilters);
+    document.getElementById('tournoiFilter').addEventListener('change', applyFilters);
+    document.getElementById('statusFilter').addEventListener('change', applyFilters);
+    document.getElementById('searchInput').addEventListener('input', applyFilters);
+
+    // Initialize
+    async function initialize() {
+      await loadTournois();
+      await loadInscriptions();
+    }
+
+    initialize();
+  </script>
+</body>
+</html>

@@ -525,6 +525,79 @@ router.get('/', authenticateToken, (req, res) => {
   });
 });
 
+// ============= NEW ROUTES FOR TOURNOIS AND INSCRIPTIONS VIEWS =============
+
+// Get all external tournaments (alias route for new view page)
+router.get('/tournois-ext', authenticateToken, (req, res) => {
+  const query = 'SELECT * FROM tournoi_ext ORDER BY debut DESC, mode, categorie';
+
+  db.all(query, [], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows);
+  });
+});
+
+// Update a tournament
+router.put('/tournois-ext/:id', authenticateToken, (req, res) => {
+  const tournoiId = parseInt(req.params.id);
+  const { nom, mode, categorie, debut, fin, lieu, taille, taille_cadre, grand_coin } = req.body;
+
+  const query = `
+    UPDATE tournoi_ext
+    SET nom = $1, mode = $2, categorie = $3, debut = $4, fin = $5,
+        lieu = $6, taille = $7, taille_cadre = $8, grand_coin = $9
+    WHERE tournoi_id = $10
+  `;
+
+  db.run(query, [nom, mode, categorie, debut, fin, lieu, taille, taille_cadre, grand_coin || 0, tournoiId], function(err) {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Tournoi not found' });
+    }
+    res.json({ success: true, message: 'Tournoi updated successfully' });
+  });
+});
+
+// Get all inscriptions (for new view page)
+router.get('/inscriptions-ext', authenticateToken, (req, res) => {
+  const query = 'SELECT * FROM inscriptions ORDER BY timestamp DESC';
+
+  db.all(query, [], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows);
+  });
+});
+
+// Update an inscription
+router.put('/inscriptions-ext/:id', authenticateToken, (req, res) => {
+  const inscriptionId = parseInt(req.params.id);
+  const { licence, email, telephone, convoque, forfait, commentaire } = req.body;
+
+  const query = `
+    UPDATE inscriptions
+    SET licence = $1, email = $2, telephone = $3, convoque = $4, forfait = $5, commentaire = $6
+    WHERE inscription_id = $7
+  `;
+
+  db.run(query, [licence, email, telephone, convoque, forfait, commentaire, inscriptionId], function(err) {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Inscription not found' });
+    }
+    res.json({ success: true, message: 'Inscription updated successfully' });
+  });
+});
+
+// ============= END NEW ROUTES =============
+
 // Delete all tournoi_ext
 router.delete('/tournoi/all', authenticateToken, (req, res) => {
   db.run('DELETE FROM tournoi_ext', [], function(err) {
