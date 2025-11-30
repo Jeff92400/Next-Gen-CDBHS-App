@@ -660,14 +660,33 @@
         return {
           poules,
           tables: poules.length + 1,
-          description: poules.map((p, i) => `Poule ${i + 1}: ${p}`).join(', ')
+          description: formatPouleDescription(poules)
         };
       }
       const config = POULE_CONFIG[numPlayers];
-      const description = config.poules.length === 1
-        ? `1 poule de ${config.poules[0]}`
-        : config.poules.map((p, i) => `${p}`).join(' + ') + ` (${config.poules.length} poules)`;
-      return { ...config, description };
+      return { ...config, description: formatPouleDescription(config.poules) };
+    }
+
+    // Format poule description: "5 poules de 3 et 1 poule de 4 (6 poules)"
+    function formatPouleDescription(poules) {
+      if (poules.length === 0) return '-';
+      if (poules.length === 1) return `1 poule de ${poules[0]}`;
+
+      // Count poules by size
+      const counts = {};
+      poules.forEach(size => {
+        counts[size] = (counts[size] || 0) + 1;
+      });
+
+      // Build description parts
+      const parts = [];
+      const sizes = Object.keys(counts).sort((a, b) => a - b);
+      sizes.forEach(size => {
+        const count = counts[size];
+        parts.push(`${count} poule${count > 1 ? 's' : ''} de ${size}`);
+      });
+
+      return `${parts.join(' et ')} (${poules.length} poules)`;
     }
 
     // Serpentine distribution
@@ -949,7 +968,15 @@
     });
 
     // Update poule labels when location dropdowns change
-    document.getElementById('locationSelect1').addEventListener('change', updatePouleLocationLabels);
+    document.getElementById('locationSelect1').addEventListener('change', () => {
+      updatePouleLocationLabels();
+      // Update summary Lieu when main location changes
+      const select = document.getElementById('locationSelect1');
+      const selectedOption = select.options[select.selectedIndex];
+      if (select.value && selectedOption) {
+        document.getElementById('summaryLieu').textContent = selectedOption.dataset.name || selectedOption.text;
+      }
+    });
     document.getElementById('locationSelect2').addEventListener('change', updatePouleLocationLabels);
 
     // Update load button state and load tournament info
