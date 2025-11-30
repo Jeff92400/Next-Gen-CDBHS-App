@@ -469,12 +469,18 @@ router.post('/import', authenticateToken, upload.single('file'), async (req, res
 function recalculateRankings(categoryId, season, callback) {
   // Get all tournament results for this category and season
   // Exclude finale (tournament_number = 4) from ranking calculation
+  // Ranking order: 1) match points DESC, 2) cumulative moyenne DESC, 3) best serie DESC
   const query = `
     SELECT
       REPLACE(tr.licence, ' ', '') as licence,
       tr.player_name,
       SUM(tr.match_points) as total_match_points,
-      AVG(tr.moyenne) as avg_moyenne,
+      SUM(tr.points) as total_points,
+      SUM(tr.reprises) as total_reprises,
+      CASE
+        WHEN SUM(tr.reprises) > 0 THEN CAST(SUM(tr.points) AS FLOAT) / CAST(SUM(tr.reprises) AS FLOAT)
+        ELSE 0
+      END as avg_moyenne,
       MAX(tr.serie) as best_serie,
       MAX(CASE WHEN t.tournament_number = 1 THEN tr.match_points ELSE 0 END) as t1_points,
       MAX(CASE WHEN t.tournament_number = 2 THEN tr.match_points ELSE 0 END) as t2_points,
@@ -988,6 +994,64 @@ router.delete('/:id', authenticateToken, (req, res) => {
       });
     });
   });
+});
+
+// Recalculate all rankings for a specific category and season (admin utility)
+router.post('/recalculate-rankings', authenticateToken, (req, res) => {
+  const { categoryId, season } = req.body;
+
+  if (!categoryId || !season) {
+    return res.status(400).json({ error: 'Category ID and season required' });
+  }
+
+  recalculateRankings(categoryId, season, (err) => {
+    if (err) {
+      return res.status(500).json({ error: 'Rankings recalculation failed: ' + err.message });
+    }
+    res.json({ message: 'Rankings recalculated successfully' });
+  });
+});
+
+// Recalculate ALL rankings for all categories and seasons (admin utility)
+router.post('/recalculate-all-rankings', authenticateToken, async (req, res) => {
+  try {
+    // Get all unique category/season combinations
+    const query = `
+      SELECT DISTINCT t.category_id, t.season
+      FROM tournaments t
+      ORDER BY t.season DESC, t.category_id
+    `;
+
+    db.all(query, [], async (err, combinations) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+
+      let recalculated = 0;
+      let errors = [];
+
+      for (const combo of combinations) {
+        await new Promise((resolve) => {
+          recalculateRankings(combo.category_id, combo.season, (err) => {
+            if (err) {
+              errors.push({ categoryId: combo.category_id, season: combo.season, error: err.message });
+            } else {
+              recalculated++;
+            }
+            resolve();
+          });
+        });
+      }
+
+      res.json({
+        message: `Recalculated rankings for ${recalculated} category/season combinations`,
+        recalculated,
+        errors: errors.length > 0 ? errors : undefined
+      });
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 module.exports = router;
