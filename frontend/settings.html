@@ -6,6 +6,30 @@
   <title>Paramètres - Billard Ranking</title>
   <link rel="icon" type="image/png" href="images/billiard-icon.png">
   <link rel="stylesheet" href="css/styles.css">
+  <style>
+    .password-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .password-wrapper input {
+      flex: 1;
+      padding-right: 40px;
+    }
+    .toggle-password {
+      position: absolute;
+      right: 10px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 18px;
+      color: #666;
+      padding: 5px;
+    }
+    .toggle-password:hover {
+      color: #1F4788;
+    }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -25,15 +49,24 @@
       <form id="changePasswordForm">
         <div class="form-group">
           <label for="oldPassword">Mot de passe actuel :</label>
-          <input type="password" id="oldPassword" required minlength="6">
+          <div class="password-wrapper">
+            <input type="password" id="oldPassword" required minlength="6">
+            <button type="button" class="toggle-password" onclick="togglePassword('oldPassword', this)">👁️</button>
+          </div>
         </div>
         <div class="form-group">
           <label for="newPassword">Nouveau mot de passe :</label>
-          <input type="password" id="newPassword" required minlength="6">
+          <div class="password-wrapper">
+            <input type="password" id="newPassword" required minlength="6">
+            <button type="button" class="toggle-password" onclick="togglePassword('newPassword', this)">👁️</button>
+          </div>
         </div>
         <div class="form-group">
           <label for="confirmPassword">Confirmer le nouveau mot de passe :</label>
-          <input type="password" id="confirmPassword" required minlength="6">
+          <div class="password-wrapper">
+            <input type="password" id="confirmPassword" required minlength="6">
+            <button type="button" class="toggle-password" onclick="togglePassword('confirmPassword', this)">👁️</button>
+          </div>
         </div>
         <button type="submit" class="btn btn-primary">Changer le mot de passe</button>
       </form>
@@ -54,7 +87,10 @@
           </div>
           <div class="form-group" style="margin-bottom: 0;">
             <label for="newUserPassword">Mot de passe :</label>
-            <input type="password" id="newUserPassword" required minlength="6" placeholder="Min. 6 caractères">
+            <div class="password-wrapper">
+              <input type="password" id="newUserPassword" required minlength="6" placeholder="Min. 6 caractères">
+              <button type="button" class="toggle-password" onclick="togglePassword('newUserPassword', this)">👁️</button>
+            </div>
           </div>
           <div class="form-group" style="margin-bottom: 0;">
             <label for="newUserRole">Rôle :</label>
@@ -138,6 +174,18 @@
 
   <script>
     const API_URL = '/api';
+
+    // Toggle password visibility
+    function togglePassword(inputId, button) {
+      const input = document.getElementById(inputId);
+      if (input.type === 'password') {
+        input.type = 'text';
+        button.textContent = '🙈';
+      } else {
+        input.type = 'password';
+        button.textContent = '👁️';
+      }
+    }
 
     // Check authentication
     const token = localStorage.getItem('token');
