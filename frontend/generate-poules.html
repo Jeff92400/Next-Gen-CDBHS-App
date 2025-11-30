@@ -1291,6 +1291,12 @@
       document.querySelectorAll('.card[id^="step"]').forEach(card => card.style.display = 'none');
       document.getElementById(`step${stepNum}`).style.display = 'block';
 
+      // Hide upcoming tournaments when leaving step 1, show it when returning to step 1
+      const upcomingCard = document.getElementById('upcomingTournamentsCard');
+      if (upcomingCard) {
+        upcomingCard.style.display = stepNum === 1 ? 'block' : 'none';
+      }
+
       document.querySelectorAll('.step').forEach((step, index) => {
         step.classList.remove('active', 'completed');
         if (index + 1 < stepNum) step.classList.add('completed');
