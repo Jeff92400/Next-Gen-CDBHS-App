@@ -5,6 +5,9 @@ const { authenticateToken } = require('./auth');
 
 const router = express.Router();
 
+// Helper function to add delay between emails (avoid rate limiting)
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 // Initialize Resend
 const getResend = () => {
   if (!process.env.RESEND_API_KEY) {
@@ -371,6 +374,9 @@ router.post('/send-convocations', authenticateToken, async (req, res) => {
         name: `${player.first_name} ${player.last_name}`,
         email: player.email
       });
+
+      // Add delay between emails to avoid rate limiting (1.5 seconds)
+      await delay(1500);
 
     } catch (error) {
       console.error(`Error sending email to ${player.email}:`, error);
