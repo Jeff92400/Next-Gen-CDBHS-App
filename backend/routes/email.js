@@ -8,11 +8,16 @@ const router = express.Router();
 // Configure Gmail transporter
 const createTransporter = () => {
   return nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true, // use SSL
     auth: {
       user: process.env.SMTP_USER || 'cdbhs92@gmail.com',
       pass: process.env.SMTP_PASS
-    }
+    },
+    connectionTimeout: 30000, // 30 seconds
+    greetingTimeout: 30000,
+    socketTimeout: 30000
   });
 };
 
