@@ -340,19 +340,21 @@ router.post('/send-convocations', authenticateToken, async (req, res) => {
             <div style="padding: 20px; background: #f8f9fa;">
               <p style="font-size: 16px;">Bonjour <strong>${player.first_name} ${player.last_name}</strong>,</p>
 
-              <p>Vous êtes convoqué(e) pour le tournoi suivant :</p>
+              <p>Le CDBHS a le plaisir de vous convier au tournoi suivant :</p>
 
-              <div style="background: white; border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin: 20px 0;">
-                <p style="margin: 5px 0;"><strong>Catégorie :</strong> ${category.display_name}</p>
-                <p style="margin: 5px 0;"><strong>Compétition :</strong> ${tournamentLabel}</p>
-                <p style="margin: 5px 0; color: #dc3545; font-weight: bold;"><strong>Date :</strong> ${dateStr}</p>
-                <p style="margin: 5px 0; color: #dc3545; font-weight: bold;"><strong>Heure :</strong> ${locations[0]?.startTime?.replace(':', 'H') || '14H00'}</p>
-                <p style="margin: 5px 0;"><strong>Lieu :</strong> ${locations[0]?.name || 'À définir'}</p>
-                ${locations[0]?.street ? `<p style="margin: 5px 0; color: #666;">${[locations[0].street, locations[0].zip_code, locations[0].city].filter(Boolean).join(' ')}</p>` : ''}
-                <p style="margin: 5px 0;"><strong>Poule :</strong> ${playerPoule.pouleNumber}</p>
-              </div>
+              <p style="margin: 5px 0;"><strong>Catégorie :</strong> ${category.display_name}</p>
+              <p style="margin: 5px 0;"><strong>Compétition :</strong> ${tournamentLabel}</p>
+              <p style="margin: 5px 0;"><strong>Date :</strong> ${dateStr}</p>
+              <p style="margin: 5px 0;"><strong>Heure :</strong> ${playerLocation?.startTime?.replace(':', 'H') || '14H00'}</p>
+              <p style="margin: 5px 0;"><strong>Lieu :</strong> ${playerLocation?.name || 'À définir'}</p>
+              ${playerLocation?.street ? `<p style="margin: 5px 0; color: #666;">${[playerLocation.street, playerLocation.zip_code, playerLocation.city].filter(Boolean).join(' ')}</p>` : ''}
+              <p style="margin: 5px 0;"><strong>Votre poule est la :</strong> ${playerPoule.pouleNumber}</p>
 
-              <p>Veuillez trouver ci-joint votre convocation détaillée avec la composition de toutes les poules du tournoi.</p>
+              <p style="margin-top: 15px;">Veuillez trouver en attachement votre convocation détaillée avec la composition de toutes les poules du tournoi.</p>
+
+              <p>En cas d'empêchement, merci d'informer dès que possible l'équipe en charge du sportif à l'adresse ci-dessous.</p>
+
+              <p>Nous vous souhaitons une excellente compétition.</p>
 
               <p style="margin-top: 20px;">Cordialement,<br><strong>Comité Départemental Billard Hauts-de-Seine</strong></p>
             </div>
