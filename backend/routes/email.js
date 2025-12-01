@@ -459,12 +459,16 @@ router.post('/create-test-data', authenticateToken, async (req, res) => {
     for (const p of players) {
       await new Promise((resolve, reject) => {
         db.run(`
-          INSERT INTO players (licence, first_name, last_name, club, is_active)
-          VALUES ($1, $2, $3, $4, true)
+          INSERT INTO players (licence, first_name, last_name, club, is_active, libre, cadre, bande, "3bandes")
+          VALUES ($1, $2, $3, $4, true, 'R1', 'NC', 'NC', 'NC')
           ON CONFLICT (licence) DO UPDATE SET
             first_name = EXCLUDED.first_name,
             last_name = EXCLUDED.last_name,
-            club = EXCLUDED.club
+            club = EXCLUDED.club,
+            libre = EXCLUDED.libre,
+            cadre = EXCLUDED.cadre,
+            bande = EXCLUDED.bande,
+            "3bandes" = EXCLUDED."3bandes"
         `, [p.licence, p.first_name, p.last_name, p.club], (err) => {
           if (err) reject(err);
           else resolve();
