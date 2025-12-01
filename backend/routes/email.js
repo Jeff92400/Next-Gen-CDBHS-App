@@ -324,7 +324,7 @@ router.post('/send-convocations', authenticateToken, async (req, res) => {
 
       // Send email using Resend
       const emailResult = await resend.emails.send({
-        from: 'CDBHS <onboarding@resend.dev>',
+        from: 'CDBHS Convocations <convocations@cdbhs.net>',
         to: [player.email],
         cc: ['cdbhs92@gmail.com'],
         subject: `Convocation ${category.display_name} - ${tournamentLabel} - ${dateStr}`,
@@ -402,7 +402,7 @@ router.post('/test', authenticateToken, async (req, res) => {
 
   try {
     const result = await resend.emails.send({
-      from: 'CDBHS <onboarding@resend.dev>',
+      from: 'CDBHS Convocations <convocations@cdbhs.net>',
       to: [testEmail || 'cdbhs92@gmail.com'],
       subject: 'Test - Configuration Email CDBHS',
       html: `
