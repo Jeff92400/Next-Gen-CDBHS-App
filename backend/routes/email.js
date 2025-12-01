@@ -16,8 +16,8 @@ const createTransporter = () => {
   });
 };
 
-// Generate Excel attachment for a specific player
-async function generatePlayerConvocation(player, tournamentInfo, pouleInfo, locationInfo) {
+// Generate Excel attachment for a specific player - includes ALL poules
+async function generatePlayerConvocation(player, tournamentInfo, allPoules, locations) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Convocation');
 
@@ -37,16 +37,17 @@ async function generatePlayerConvocation(player, tournamentInfo, pouleInfo, loca
     accent: 'FFFFC107',
     red: 'FFDC3545',
     white: 'FFFFFFFF',
-    light: 'FFF8F9FA'
+    light: 'FFF8F9FA',
+    highlight: 'FFE3F2FD'
   };
 
   // Column widths
   sheet.columns = [
-    { width: 12 },
-    { width: 18 },
-    { width: 25 },
-    { width: 20 },
-    { width: 35 }
+    { width: 10 },
+    { width: 16 },
+    { width: 28 },
+    { width: 24 },
+    { width: 45 }
   ];
 
   const blackBorder = {
@@ -56,12 +57,22 @@ async function generatePlayerConvocation(player, tournamentInfo, pouleInfo, loca
     right: { style: 'thin', color: { argb: 'FF000000' } }
   };
 
+  // Find player's poule
+  let playerPouleNumber = null;
+  for (const poule of allPoules) {
+    if (poule.players.find(p => p.licence === player.licence)) {
+      playerPouleNumber = poule.number;
+      break;
+    }
+  }
+
   let row = 1;
 
-  // Header - CONVOCATION
+  // Header - CONVOCATION with tournament number
+  const tournamentLabel = tournamentInfo.tournamentNum === '4' ? 'FINALE DÉPARTEMENTALE' : `TOURNOI N°${tournamentInfo.tournamentNum}`;
   sheet.mergeCells(`A${row}:E${row}`);
-  sheet.getCell(`A${row}`).value = 'CONVOCATION';
-  sheet.getCell(`A${row}`).font = { size: 28, bold: true, color: { argb: colors.white } };
+  sheet.getCell(`A${row}`).value = `CONVOCATION ${tournamentLabel}`;
+  sheet.getCell(`A${row}`).font = { size: 24, bold: true, color: { argb: colors.white } };
   sheet.getCell(`A${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.primary } };
   sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
   sheet.getCell(`A${row}`).border = blackBorder;
@@ -79,51 +90,7 @@ async function generatePlayerConvocation(player, tournamentInfo, pouleInfo, loca
   row++;
 
   // Empty row
-  sheet.getRow(row).height = 15;
-  row++;
-
-  // Player name - prominent
-  sheet.mergeCells(`A${row}:E${row}`);
-  sheet.getCell(`A${row}`).value = `${player.first_name} ${player.last_name}`.toUpperCase();
-  sheet.getCell(`A${row}`).font = { size: 22, bold: true, color: { argb: colors.primary } };
-  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-  sheet.getCell(`A${row}`).border = blackBorder;
-  sheet.getRow(row).height = 45;
-  row++;
-
-  // Player licence
-  sheet.mergeCells(`A${row}:E${row}`);
-  sheet.getCell(`A${row}`).value = `Licence: ${player.licence}`;
-  sheet.getCell(`A${row}`).font = { size: 12, color: { argb: 'FF666666' } };
-  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-  sheet.getRow(row).height = 25;
-  row++;
-
-  // Empty row
-  sheet.getRow(row).height = 20;
-  row++;
-
-  // Tournament info box
-  sheet.mergeCells(`A${row}:E${row}`);
-  sheet.getCell(`A${row}`).value = tournamentInfo.categoryName;
-  sheet.getCell(`A${row}`).font = { size: 16, bold: true, color: { argb: colors.white } };
-  sheet.getCell(`A${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.secondary } };
-  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-  sheet.getCell(`A${row}`).border = blackBorder;
-  sheet.getRow(row).height = 35;
-  row++;
-
-  sheet.mergeCells(`A${row}:E${row}`);
-  const tournamentLabel = tournamentInfo.tournamentNum === '4' ? 'FINALE DÉPARTEMENTALE' : `TOURNOI N°${tournamentInfo.tournamentNum}`;
-  sheet.getCell(`A${row}`).value = tournamentLabel;
-  sheet.getCell(`A${row}`).font = { size: 14, bold: true };
-  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-  sheet.getCell(`A${row}`).border = blackBorder;
-  sheet.getRow(row).height = 30;
-  row++;
-
-  // Empty row
-  sheet.getRow(row).height = 15;
+  sheet.getRow(row).height = 10;
   row++;
 
   // Date - prominent in red
@@ -138,135 +105,142 @@ async function generatePlayerConvocation(player, tournamentInfo, pouleInfo, loca
   sheet.getRow(row).height = 40;
   row++;
 
-  // Time
-  sheet.mergeCells(`A${row}:E${row}`);
-  sheet.getCell(`A${row}`).value = `HEURE: ${locationInfo.startTime.replace(':', 'H')}`;
-  sheet.getCell(`A${row}`).font = { size: 16, bold: true, color: { argb: colors.red } };
-  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-  sheet.getCell(`A${row}`).border = blackBorder;
-  sheet.getRow(row).height = 35;
-  row++;
-
   // Empty row
-  sheet.getRow(row).height = 15;
+  sheet.getRow(row).height = 10;
   row++;
 
-  // Location header
+  // Category
   sheet.mergeCells(`A${row}:E${row}`);
-  sheet.getCell(`A${row}`).value = `📍 LIEU DE LA COMPÉTITION`;
-  sheet.getCell(`A${row}`).font = { size: 14, bold: true, color: { argb: 'FF333333' } };
-  sheet.getCell(`A${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.accent } };
-  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-  sheet.getCell(`A${row}`).border = blackBorder;
-  sheet.getRow(row).height = 32;
-  row++;
-
-  // Location name
-  sheet.mergeCells(`A${row}:E${row}`);
-  sheet.getCell(`A${row}`).value = locationInfo.name.toUpperCase();
-  sheet.getCell(`A${row}`).font = { size: 14, bold: true };
-  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-  sheet.getCell(`A${row}`).border = blackBorder;
-  sheet.getRow(row).height = 30;
-  row++;
-
-  // Address
-  if (locationInfo.street || locationInfo.city) {
-    sheet.mergeCells(`A${row}:E${row}`);
-    const address = [locationInfo.street, locationInfo.zip_code, locationInfo.city].filter(Boolean).join(' ');
-    sheet.getCell(`A${row}`).value = address;
-    sheet.getCell(`A${row}`).font = { size: 12 };
-    sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-    sheet.getCell(`A${row}`).border = blackBorder;
-    sheet.getRow(row).height = 26;
-    row++;
-  }
-
-  // Contact info
-  if (locationInfo.phone || locationInfo.email) {
-    sheet.mergeCells(`A${row}:E${row}`);
-    const contact = [];
-    if (locationInfo.phone) contact.push(`📞 ${locationInfo.phone}`);
-    if (locationInfo.email) contact.push(`✉️ ${locationInfo.email}`);
-    sheet.getCell(`A${row}`).value = contact.join('  •  ');
-    sheet.getCell(`A${row}`).font = { size: 11, color: { argb: 'FF666666' } };
-    sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-    sheet.getCell(`A${row}`).border = blackBorder;
-    sheet.getRow(row).height = 26;
-    row++;
-  }
-
-  // Empty row
-  sheet.getRow(row).height = 15;
-  row++;
-
-  // Poule assignment
-  sheet.mergeCells(`A${row}:E${row}`);
-  sheet.getCell(`A${row}`).value = `POULE ${pouleInfo.pouleNumber}`;
+  sheet.getCell(`A${row}`).value = tournamentInfo.categoryName;
   sheet.getCell(`A${row}`).font = { size: 16, bold: true, color: { argb: colors.white } };
-  sheet.getCell(`A${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.primary } };
+  sheet.getCell(`A${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.secondary } };
   sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
   sheet.getCell(`A${row}`).border = blackBorder;
   sheet.getRow(row).height = 35;
   row++;
 
-  // Poule players header
-  const headers = ['#', 'Licence', 'Nom', 'Prénom', 'Club'];
-  headers.forEach((header, i) => {
-    const col = String.fromCharCode(65 + i);
-    sheet.getCell(`${col}${row}`).value = header;
-    sheet.getCell(`${col}${row}`).font = { size: 11, bold: true, color: { argb: colors.white } };
-    sheet.getCell(`${col}${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.secondary } };
-    sheet.getCell(`${col}${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-    sheet.getCell(`${col}${row}`).border = blackBorder;
-  });
-  sheet.getRow(row).height = 28;
-  row++;
-
-  // Poule players
-  pouleInfo.players.forEach((p, idx) => {
-    const isCurrentPlayer = p.licence === player.licence;
-    const rowColor = isCurrentPlayer ? 'FFE3F2FD' : (idx % 2 === 0 ? colors.white : colors.light);
-
-    sheet.getCell(`A${row}`).value = p.finalRank || idx + 1;
-    sheet.getCell(`B${row}`).value = p.licence || '';
-    sheet.getCell(`C${row}`).value = (p.last_name || '').toUpperCase();
-    sheet.getCell(`C${row}`).font = { bold: isCurrentPlayer, size: 11 };
-    sheet.getCell(`D${row}`).value = p.first_name || '';
-    sheet.getCell(`E${row}`).value = p.club || '';
-
-    ['A', 'B', 'C', 'D', 'E'].forEach(col => {
-      sheet.getCell(`${col}${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowColor } };
-      sheet.getCell(`${col}${row}`).border = blackBorder;
-      sheet.getCell(`${col}${row}`).alignment = { vertical: 'middle' };
-    });
-    sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-    sheet.getCell(`B${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-    sheet.getRow(row).height = 26;
-    row++;
-  });
-
   // Empty row
+  sheet.getRow(row).height = 10;
   row++;
+
+  // Player info box - highlight their assignment
+  sheet.mergeCells(`A${row}:E${row}`);
+  sheet.getCell(`A${row}`).value = `${player.first_name} ${player.last_name} - Vous êtes en POULE ${playerPouleNumber}`.toUpperCase();
+  sheet.getCell(`A${row}`).font = { size: 14, bold: true, color: { argb: colors.primary } };
+  sheet.getCell(`A${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.highlight } };
+  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getCell(`A${row}`).border = blackBorder;
+  sheet.getRow(row).height = 35;
+  row++;
+
+  // Space before poules
+  row++;
+
+  // Helper to get location for a poule
+  const getLocationForPoule = (poule) => {
+    const locNum = poule.locationNum || '1';
+    return locations.find(l => l.locationNum === locNum) || locations[0] || { name: 'À définir', startTime: '14:00' };
+  };
+
+  // ALL POULES
+  for (const poule of allPoules) {
+    const isPlayerPoule = poule.number === playerPouleNumber;
+    const loc = getLocationForPoule(poule);
+    const locName = loc?.name || 'À définir';
+    const locStreet = loc?.street || '';
+    const locZipCode = loc?.zip_code || '';
+    const locCity = loc?.city || '';
+    const fullAddress = [locStreet, locZipCode, locCity].filter(Boolean).join(' ');
+    const locPhone = loc?.phone || '';
+    const locEmail = loc?.email || '';
+    const locTime = loc?.startTime || '14:00';
+
+    // Location header bar
+    sheet.mergeCells(`A${row}:E${row}`);
+    sheet.getCell(`A${row}`).value = `📍 ${locName.toUpperCase()}`;
+    sheet.getCell(`A${row}`).font = { size: 12, bold: true, color: { argb: 'FF333333' } };
+    sheet.getCell(`A${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.accent } };
+    sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.getCell(`A${row}`).border = blackBorder;
+    sheet.getRow(row).height = 28;
+    row++;
+
+    // Address + time on one line
+    sheet.mergeCells(`A${row}:E${row}`);
+    const addressTimeText = [fullAddress, `🕐 ${locTime.replace(':', 'H')}`].filter(Boolean).join('  •  ');
+    sheet.getCell(`A${row}`).value = addressTimeText;
+    sheet.getCell(`A${row}`).font = { size: 11, color: { argb: 'FF333333' } };
+    sheet.getCell(`A${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.accent } };
+    sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.getCell(`A${row}`).border = blackBorder;
+    sheet.getRow(row).height = 24;
+    row++;
+
+    // Poule title - highlight if player's poule
+    sheet.mergeCells(`A${row}:E${row}`);
+    const pouleTitle = isPlayerPoule ? `⭐ POULE ${poule.number} (VOTRE POULE)` : `POULE ${poule.number}`;
+    sheet.getCell(`A${row}`).value = pouleTitle;
+    sheet.getCell(`A${row}`).font = { size: 13, bold: true, color: { argb: colors.white } };
+    sheet.getCell(`A${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isPlayerPoule ? 'FF28A745' : colors.primary } };
+    sheet.getCell(`A${row}`).alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+    sheet.getCell(`A${row}`).border = blackBorder;
+    sheet.getRow(row).height = 28;
+    row++;
+
+    // Table headers
+    const headers = ['#', 'Licence', 'Nom', 'Prénom', 'Club'];
+    headers.forEach((header, i) => {
+      const col = String.fromCharCode(65 + i);
+      sheet.getCell(`${col}${row}`).value = header;
+      sheet.getCell(`${col}${row}`).font = { size: 10, bold: true, color: { argb: colors.white } };
+      sheet.getCell(`${col}${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.secondary } };
+      sheet.getCell(`${col}${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+      sheet.getCell(`${col}${row}`).border = blackBorder;
+    });
+    sheet.getRow(row).height = 24;
+    row++;
+
+    // Players with alternating colors
+    poule.players.forEach((p, pIndex) => {
+      const isCurrentPlayer = p.licence === player.licence;
+      const isEven = pIndex % 2 === 0;
+      const rowColor = isCurrentPlayer ? colors.highlight : (isEven ? colors.white : colors.light);
+
+      sheet.getCell(`A${row}`).value = p.finalRank || pIndex + 1;
+      sheet.getCell(`B${row}`).value = p.licence || '';
+      sheet.getCell(`C${row}`).value = (p.last_name || '').toUpperCase();
+      sheet.getCell(`C${row}`).font = { bold: isCurrentPlayer, size: 10 };
+      sheet.getCell(`D${row}`).value = p.first_name || '';
+      sheet.getCell(`D${row}`).font = { size: 10 };
+      sheet.getCell(`E${row}`).value = p.club || '';
+      sheet.getCell(`E${row}`).font = { size: 9 };
+
+      ['A', 'B', 'C', 'D', 'E'].forEach(col => {
+        sheet.getCell(`${col}${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowColor } };
+        sheet.getCell(`${col}${row}`).border = blackBorder;
+        sheet.getCell(`${col}${row}`).alignment = { vertical: 'middle' };
+      });
+      sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+      sheet.getCell(`B${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+      sheet.getRow(row).height = 22;
+      row++;
+    });
+
+    // Space between poules
+    row++;
+  }
 
   // Note
   sheet.mergeCells(`A${row}:E${row}`);
   sheet.getCell(`A${row}`).value = "ℹ️ Les joueurs d'un même club jouent ensemble au 1er tour";
   sheet.getCell(`A${row}`).font = { size: 10, italic: true, color: { argb: 'FF666666' } };
   sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-  sheet.getRow(row).height = 24;
+  sheet.getRow(row).height = 22;
   row += 2;
 
   // Footer
   sheet.mergeCells(`A${row}:E${row}`);
-  sheet.getCell(`A${row}`).value = `Comité Départemental Billard Hauts-de-Seine`;
-  sheet.getCell(`A${row}`).font = { size: 12, bold: true, color: { argb: colors.primary } };
-  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-  sheet.getRow(row).height = 25;
-  row++;
-
-  sheet.mergeCells(`A${row}:E${row}`);
-  sheet.getCell(`A${row}`).value = `Document généré le ${new Date().toLocaleDateString('fr-FR')}`;
+  sheet.getCell(`A${row}`).value = `Comité Départemental Billard Hauts-de-Seine • ${new Date().toLocaleDateString('fr-FR')}`;
   sheet.getCell(`A${row}`).font = { size: 10, italic: true, color: { argb: 'FF999999' } };
   sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
   sheet.getRow(row).height = 22;
@@ -344,7 +318,7 @@ router.post('/send-convocations', authenticateToken, async (req, res) => {
     }
 
     try {
-      // Generate personalized Excel
+      // Generate personalized Excel with ALL poules
       const workbook = await generatePlayerConvocation(
         player,
         {
@@ -353,8 +327,8 @@ router.post('/send-convocations', authenticateToken, async (req, res) => {
           tournamentNum: tournament,
           date: tournamentDate
         },
-        playerPoule,
-        playerLocation || { name: 'À définir', startTime: '14:00' }
+        poules,
+        locations
       );
 
       const buffer = await workbook.xlsx.writeBuffer();
@@ -382,13 +356,13 @@ router.post('/send-convocations', authenticateToken, async (req, res) => {
                 <p style="margin: 5px 0;"><strong>Catégorie :</strong> ${category.display_name}</p>
                 <p style="margin: 5px 0;"><strong>Compétition :</strong> ${tournamentLabel}</p>
                 <p style="margin: 5px 0; color: #dc3545; font-weight: bold;"><strong>Date :</strong> ${dateStr}</p>
-                <p style="margin: 5px 0; color: #dc3545; font-weight: bold;"><strong>Heure :</strong> ${playerLocation?.startTime?.replace(':', 'H') || '14H00'}</p>
-                <p style="margin: 5px 0;"><strong>Lieu :</strong> ${playerLocation?.name || 'À définir'}</p>
-                ${playerLocation?.street ? `<p style="margin: 5px 0; color: #666;">${[playerLocation.street, playerLocation.zip_code, playerLocation.city].filter(Boolean).join(' ')}</p>` : ''}
+                <p style="margin: 5px 0; color: #dc3545; font-weight: bold;"><strong>Heure :</strong> ${locations[0]?.startTime?.replace(':', 'H') || '14H00'}</p>
+                <p style="margin: 5px 0;"><strong>Lieu :</strong> ${locations[0]?.name || 'À définir'}</p>
+                ${locations[0]?.street ? `<p style="margin: 5px 0; color: #666;">${[locations[0].street, locations[0].zip_code, locations[0].city].filter(Boolean).join(' ')}</p>` : ''}
                 <p style="margin: 5px 0;"><strong>Poule :</strong> ${playerPoule.pouleNumber}</p>
               </div>
 
-              <p>Veuillez trouver ci-joint votre convocation détaillée avec la composition de votre poule.</p>
+              <p>Veuillez trouver ci-joint votre convocation détaillée avec la composition de toutes les poules du tournoi.</p>
 
               <p style="margin-top: 20px;">Cordialement,<br><strong>Comité Départemental Billard Hauts-de-Seine</strong></p>
             </div>
