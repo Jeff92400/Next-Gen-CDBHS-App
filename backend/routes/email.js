@@ -1,24 +1,16 @@
 const express = require('express');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const ExcelJS = require('exceljs');
 const { authenticateToken } = require('./auth');
 
 const router = express.Router();
 
-// Configure Gmail transporter
-const createTransporter = () => {
-  return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true, // use SSL
-    auth: {
-      user: process.env.SMTP_USER || 'cdbhs92@gmail.com',
-      pass: process.env.SMTP_PASS
-    },
-    connectionTimeout: 30000, // 30 seconds
-    greetingTimeout: 30000,
-    socketTimeout: 30000
-  });
+// Initialize Resend
+const getResend = () => {
+  if (!process.env.RESEND_API_KEY) {
+    return null;
+  }
+  return new Resend(process.env.RESEND_API_KEY);
 };
 
 // Generate Excel attachment for a specific player - includes ALL poules
@@ -257,27 +249,14 @@ async function generatePlayerConvocation(player, tournamentInfo, allPoules, loca
 router.post('/send-convocations', authenticateToken, async (req, res) => {
   const { players, poules, category, season, tournament, tournamentDate, locations, sendToAll } = req.body;
 
-  if (!process.env.SMTP_PASS) {
+  const resend = getResend();
+  if (!resend) {
     return res.status(500).json({
-      error: 'Email not configured. Please set SMTP_PASS environment variable.'
+      error: 'Email not configured. Please set RESEND_API_KEY environment variable.'
     });
   }
 
-  const transporter = createTransporter();
-
-  // Verify connection
-  try {
-    console.log('Attempting SMTP connection with user:', process.env.SMTP_USER);
-    console.log('SMTP_PASS is set:', !!process.env.SMTP_PASS, 'length:', process.env.SMTP_PASS?.length);
-    await transporter.verify();
-    console.log('SMTP connection successful');
-  } catch (error) {
-    console.error('SMTP connection error:', error.message);
-    console.error('Full error:', error);
-    return res.status(500).json({
-      error: `Could not connect to email server: ${error.message}`
-    });
-  }
+  console.log('Using Resend API for email sending');
 
   const results = {
     sent: [],
@@ -341,15 +320,13 @@ router.post('/send-convocations', authenticateToken, async (req, res) => {
       );
 
       const buffer = await workbook.xlsx.writeBuffer();
+      const base64Content = buffer.toString('base64');
 
-      // Send email
-      const mailOptions = {
-        from: {
-          name: 'Comité Départemental Billard Hauts-de-Seine',
-          address: process.env.SMTP_USER || 'cdbhs92@gmail.com'
-        },
-        to: player.email,
-        cc: process.env.SMTP_USER || 'cdbhs92@gmail.com',
+      // Send email using Resend
+      const emailResult = await resend.emails.send({
+        from: 'CDBHS <onboarding@resend.dev>',
+        to: [player.email],
+        cc: ['cdbhs92@gmail.com'],
         subject: `Convocation ${category.display_name} - ${tournamentLabel} - ${dateStr}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -384,11 +361,11 @@ router.post('/send-convocations', authenticateToken, async (req, res) => {
         `,
         attachments: [{
           filename: `Convocation_${player.last_name}_${player.first_name}_${category.display_name.replace(/\s+/g, '_')}_T${tournament}.xlsx`,
-          content: buffer
+          content: base64Content
         }]
-      };
+      });
 
-      await transporter.sendMail(mailOptions);
+      console.log('Email sent:', emailResult);
 
       results.sent.push({
         name: `${player.first_name} ${player.last_name}`,
@@ -416,23 +393,17 @@ router.post('/send-convocations', authenticateToken, async (req, res) => {
 router.post('/test', authenticateToken, async (req, res) => {
   const { testEmail } = req.body;
 
-  if (!process.env.SMTP_PASS) {
+  const resend = getResend();
+  if (!resend) {
     return res.status(500).json({
-      error: 'Email not configured. Please set SMTP_PASS environment variable.'
+      error: 'Email not configured. Please set RESEND_API_KEY environment variable.'
     });
   }
 
-  const transporter = createTransporter();
-
   try {
-    await transporter.verify();
-
-    await transporter.sendMail({
-      from: {
-        name: 'Comité Départemental Billard Hauts-de-Seine',
-        address: process.env.SMTP_USER || 'cdbhs92@gmail.com'
-      },
-      to: testEmail || process.env.SMTP_USER,
+    const result = await resend.emails.send({
+      from: 'CDBHS <onboarding@resend.dev>',
+      to: [testEmail || 'cdbhs92@gmail.com'],
       subject: 'Test - Configuration Email CDBHS',
       html: `
         <div style="font-family: Arial, sans-serif; padding: 20px;">
@@ -443,7 +414,8 @@ router.post('/test', authenticateToken, async (req, res) => {
       `
     });
 
-    res.json({ success: true, message: 'Email de test envoyé avec succès' });
+    console.log('Test email result:', result);
+    res.json({ success: true, message: 'Email de test envoyé avec succès', result });
   } catch (error) {
     console.error('Email test error:', error);
     res.status(500).json({ error: error.message });
