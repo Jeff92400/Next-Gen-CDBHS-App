@@ -262,11 +262,15 @@ router.post('/send-convocations', authenticateToken, async (req, res) => {
 
   // Verify connection
   try {
+    console.log('Attempting SMTP connection with user:', process.env.SMTP_USER);
+    console.log('SMTP_PASS is set:', !!process.env.SMTP_PASS, 'length:', process.env.SMTP_PASS?.length);
     await transporter.verify();
+    console.log('SMTP connection successful');
   } catch (error) {
-    console.error('SMTP connection error:', error);
+    console.error('SMTP connection error:', error.message);
+    console.error('Full error:', error);
     return res.status(500).json({
-      error: 'Could not connect to email server. Please check SMTP configuration.'
+      error: `Could not connect to email server: ${error.message}`
     });
   }
 
