@@ -1,0 +1,469 @@
+const express = require('express');
+const nodemailer = require('nodemailer');
+const ExcelJS = require('exceljs');
+const { authenticateToken } = require('./auth');
+
+const router = express.Router();
+
+// Configure Gmail transporter
+const createTransporter = () => {
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.SMTP_USER || 'cdbhs92@gmail.com',
+      pass: process.env.SMTP_PASS
+    }
+  });
+};
+
+// Generate Excel attachment for a specific player
+async function generatePlayerConvocation(player, tournamentInfo, pouleInfo, locationInfo) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Convocation');
+
+  // Page setup
+  sheet.pageSetup = {
+    paperSize: 9,
+    orientation: 'portrait',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 1
+  };
+
+  // Colors
+  const colors = {
+    primary: 'FF1F4788',
+    secondary: 'FF667EEA',
+    accent: 'FFFFC107',
+    red: 'FFDC3545',
+    white: 'FFFFFFFF',
+    light: 'FFF8F9FA'
+  };
+
+  // Column widths
+  sheet.columns = [
+    { width: 12 },
+    { width: 18 },
+    { width: 25 },
+    { width: 20 },
+    { width: 35 }
+  ];
+
+  const blackBorder = {
+    top: { style: 'thin', color: { argb: 'FF000000' } },
+    left: { style: 'thin', color: { argb: 'FF000000' } },
+    bottom: { style: 'thin', color: { argb: 'FF000000' } },
+    right: { style: 'thin', color: { argb: 'FF000000' } }
+  };
+
+  let row = 1;
+
+  // Header - CONVOCATION
+  sheet.mergeCells(`A${row}:E${row}`);
+  sheet.getCell(`A${row}`).value = 'CONVOCATION';
+  sheet.getCell(`A${row}`).font = { size: 28, bold: true, color: { argb: colors.white } };
+  sheet.getCell(`A${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.primary } };
+  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getCell(`A${row}`).border = blackBorder;
+  sheet.getRow(row).height = 50;
+  row++;
+
+  // Season
+  sheet.mergeCells(`A${row}:E${row}`);
+  sheet.getCell(`A${row}`).value = `SAISON ${tournamentInfo.season}`;
+  sheet.getCell(`A${row}`).font = { size: 16, bold: true, color: { argb: colors.white } };
+  sheet.getCell(`A${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.secondary } };
+  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getCell(`A${row}`).border = blackBorder;
+  sheet.getRow(row).height = 35;
+  row++;
+
+  // Empty row
+  sheet.getRow(row).height = 15;
+  row++;
+
+  // Player name - prominent
+  sheet.mergeCells(`A${row}:E${row}`);
+  sheet.getCell(`A${row}`).value = `${player.first_name} ${player.last_name}`.toUpperCase();
+  sheet.getCell(`A${row}`).font = { size: 22, bold: true, color: { argb: colors.primary } };
+  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getCell(`A${row}`).border = blackBorder;
+  sheet.getRow(row).height = 45;
+  row++;
+
+  // Player licence
+  sheet.mergeCells(`A${row}:E${row}`);
+  sheet.getCell(`A${row}`).value = `Licence: ${player.licence}`;
+  sheet.getCell(`A${row}`).font = { size: 12, color: { argb: 'FF666666' } };
+  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getRow(row).height = 25;
+  row++;
+
+  // Empty row
+  sheet.getRow(row).height = 20;
+  row++;
+
+  // Tournament info box
+  sheet.mergeCells(`A${row}:E${row}`);
+  sheet.getCell(`A${row}`).value = tournamentInfo.categoryName;
+  sheet.getCell(`A${row}`).font = { size: 16, bold: true, color: { argb: colors.white } };
+  sheet.getCell(`A${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.secondary } };
+  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getCell(`A${row}`).border = blackBorder;
+  sheet.getRow(row).height = 35;
+  row++;
+
+  sheet.mergeCells(`A${row}:E${row}`);
+  const tournamentLabel = tournamentInfo.tournamentNum === '4' ? 'FINALE DÉPARTEMENTALE' : `TOURNOI N°${tournamentInfo.tournamentNum}`;
+  sheet.getCell(`A${row}`).value = tournamentLabel;
+  sheet.getCell(`A${row}`).font = { size: 14, bold: true };
+  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getCell(`A${row}`).border = blackBorder;
+  sheet.getRow(row).height = 30;
+  row++;
+
+  // Empty row
+  sheet.getRow(row).height = 15;
+  row++;
+
+  // Date - prominent in red
+  sheet.mergeCells(`A${row}:E${row}`);
+  const dateStr = tournamentInfo.date
+    ? new Date(tournamentInfo.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase()
+    : 'DATE À DÉFINIR';
+  sheet.getCell(`A${row}`).value = dateStr;
+  sheet.getCell(`A${row}`).font = { size: 18, bold: true, color: { argb: colors.red } };
+  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getCell(`A${row}`).border = blackBorder;
+  sheet.getRow(row).height = 40;
+  row++;
+
+  // Time
+  sheet.mergeCells(`A${row}:E${row}`);
+  sheet.getCell(`A${row}`).value = `HEURE: ${locationInfo.startTime.replace(':', 'H')}`;
+  sheet.getCell(`A${row}`).font = { size: 16, bold: true, color: { argb: colors.red } };
+  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getCell(`A${row}`).border = blackBorder;
+  sheet.getRow(row).height = 35;
+  row++;
+
+  // Empty row
+  sheet.getRow(row).height = 15;
+  row++;
+
+  // Location header
+  sheet.mergeCells(`A${row}:E${row}`);
+  sheet.getCell(`A${row}`).value = `📍 LIEU DE LA COMPÉTITION`;
+  sheet.getCell(`A${row}`).font = { size: 14, bold: true, color: { argb: 'FF333333' } };
+  sheet.getCell(`A${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.accent } };
+  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getCell(`A${row}`).border = blackBorder;
+  sheet.getRow(row).height = 32;
+  row++;
+
+  // Location name
+  sheet.mergeCells(`A${row}:E${row}`);
+  sheet.getCell(`A${row}`).value = locationInfo.name.toUpperCase();
+  sheet.getCell(`A${row}`).font = { size: 14, bold: true };
+  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getCell(`A${row}`).border = blackBorder;
+  sheet.getRow(row).height = 30;
+  row++;
+
+  // Address
+  if (locationInfo.street || locationInfo.city) {
+    sheet.mergeCells(`A${row}:E${row}`);
+    const address = [locationInfo.street, locationInfo.zip_code, locationInfo.city].filter(Boolean).join(' ');
+    sheet.getCell(`A${row}`).value = address;
+    sheet.getCell(`A${row}`).font = { size: 12 };
+    sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.getCell(`A${row}`).border = blackBorder;
+    sheet.getRow(row).height = 26;
+    row++;
+  }
+
+  // Contact info
+  if (locationInfo.phone || locationInfo.email) {
+    sheet.mergeCells(`A${row}:E${row}`);
+    const contact = [];
+    if (locationInfo.phone) contact.push(`📞 ${locationInfo.phone}`);
+    if (locationInfo.email) contact.push(`✉️ ${locationInfo.email}`);
+    sheet.getCell(`A${row}`).value = contact.join('  •  ');
+    sheet.getCell(`A${row}`).font = { size: 11, color: { argb: 'FF666666' } };
+    sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.getCell(`A${row}`).border = blackBorder;
+    sheet.getRow(row).height = 26;
+    row++;
+  }
+
+  // Empty row
+  sheet.getRow(row).height = 15;
+  row++;
+
+  // Poule assignment
+  sheet.mergeCells(`A${row}:E${row}`);
+  sheet.getCell(`A${row}`).value = `POULE ${pouleInfo.pouleNumber}`;
+  sheet.getCell(`A${row}`).font = { size: 16, bold: true, color: { argb: colors.white } };
+  sheet.getCell(`A${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.primary } };
+  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getCell(`A${row}`).border = blackBorder;
+  sheet.getRow(row).height = 35;
+  row++;
+
+  // Poule players header
+  const headers = ['#', 'Licence', 'Nom', 'Prénom', 'Club'];
+  headers.forEach((header, i) => {
+    const col = String.fromCharCode(65 + i);
+    sheet.getCell(`${col}${row}`).value = header;
+    sheet.getCell(`${col}${row}`).font = { size: 11, bold: true, color: { argb: colors.white } };
+    sheet.getCell(`${col}${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.secondary } };
+    sheet.getCell(`${col}${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.getCell(`${col}${row}`).border = blackBorder;
+  });
+  sheet.getRow(row).height = 28;
+  row++;
+
+  // Poule players
+  pouleInfo.players.forEach((p, idx) => {
+    const isCurrentPlayer = p.licence === player.licence;
+    const rowColor = isCurrentPlayer ? 'FFE3F2FD' : (idx % 2 === 0 ? colors.white : colors.light);
+
+    sheet.getCell(`A${row}`).value = p.finalRank || idx + 1;
+    sheet.getCell(`B${row}`).value = p.licence || '';
+    sheet.getCell(`C${row}`).value = (p.last_name || '').toUpperCase();
+    sheet.getCell(`C${row}`).font = { bold: isCurrentPlayer, size: 11 };
+    sheet.getCell(`D${row}`).value = p.first_name || '';
+    sheet.getCell(`E${row}`).value = p.club || '';
+
+    ['A', 'B', 'C', 'D', 'E'].forEach(col => {
+      sheet.getCell(`${col}${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowColor } };
+      sheet.getCell(`${col}${row}`).border = blackBorder;
+      sheet.getCell(`${col}${row}`).alignment = { vertical: 'middle' };
+    });
+    sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.getCell(`B${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.getRow(row).height = 26;
+    row++;
+  });
+
+  // Empty row
+  row++;
+
+  // Note
+  sheet.mergeCells(`A${row}:E${row}`);
+  sheet.getCell(`A${row}`).value = "ℹ️ Les joueurs d'un même club jouent ensemble au 1er tour";
+  sheet.getCell(`A${row}`).font = { size: 10, italic: true, color: { argb: 'FF666666' } };
+  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getRow(row).height = 24;
+  row += 2;
+
+  // Footer
+  sheet.mergeCells(`A${row}:E${row}`);
+  sheet.getCell(`A${row}`).value = `Comité Départemental Billard Hauts-de-Seine`;
+  sheet.getCell(`A${row}`).font = { size: 12, bold: true, color: { argb: colors.primary } };
+  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getRow(row).height = 25;
+  row++;
+
+  sheet.mergeCells(`A${row}:E${row}`);
+  sheet.getCell(`A${row}`).value = `Document généré le ${new Date().toLocaleDateString('fr-FR')}`;
+  sheet.getCell(`A${row}`).font = { size: 10, italic: true, color: { argb: 'FF999999' } };
+  sheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getRow(row).height = 22;
+
+  return workbook;
+}
+
+// Send convocation emails
+router.post('/send-convocations', authenticateToken, async (req, res) => {
+  const { players, poules, category, season, tournament, tournamentDate, locations, sendToAll } = req.body;
+
+  if (!process.env.SMTP_PASS) {
+    return res.status(500).json({
+      error: 'Email not configured. Please set SMTP_PASS environment variable.'
+    });
+  }
+
+  const transporter = createTransporter();
+
+  // Verify connection
+  try {
+    await transporter.verify();
+  } catch (error) {
+    console.error('SMTP connection error:', error);
+    return res.status(500).json({
+      error: 'Could not connect to email server. Please check SMTP configuration.'
+    });
+  }
+
+  const results = {
+    sent: [],
+    failed: [],
+    skipped: []
+  };
+
+  const tournamentLabel = tournament === '4' ? 'Finale Départementale' : `Tournoi ${tournament}`;
+  const dateStr = tournamentDate
+    ? new Date(tournamentDate).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    : 'Date à définir';
+
+  // Process each player
+  for (const player of players) {
+    // Skip if no email
+    if (!player.email || !player.email.includes('@')) {
+      results.skipped.push({
+        name: `${player.first_name} ${player.last_name}`,
+        reason: 'Pas d\'email valide'
+      });
+      continue;
+    }
+
+    // Find which poule this player is in
+    let playerPoule = null;
+    let playerLocation = null;
+    for (const poule of poules) {
+      const found = poule.players.find(p => p.licence === player.licence);
+      if (found) {
+        playerPoule = {
+          pouleNumber: poule.number,
+          players: poule.players
+        };
+        // Get location for this poule
+        const locNum = poule.locationNum || '1';
+        playerLocation = locations.find(l => l.locationNum === locNum) || locations[0];
+        break;
+      }
+    }
+
+    if (!playerPoule) {
+      results.skipped.push({
+        name: `${player.first_name} ${player.last_name}`,
+        reason: 'Joueur non trouvé dans les poules'
+      });
+      continue;
+    }
+
+    try {
+      // Generate personalized Excel
+      const workbook = await generatePlayerConvocation(
+        player,
+        {
+          categoryName: category.display_name,
+          season,
+          tournamentNum: tournament,
+          date: tournamentDate
+        },
+        playerPoule,
+        playerLocation || { name: 'À définir', startTime: '14:00' }
+      );
+
+      const buffer = await workbook.xlsx.writeBuffer();
+
+      // Send email
+      const mailOptions = {
+        from: {
+          name: 'Comité Départemental Billard Hauts-de-Seine',
+          address: process.env.SMTP_USER || 'cdbhs92@gmail.com'
+        },
+        to: player.email,
+        subject: `Convocation ${category.display_name} - ${tournamentLabel} - ${dateStr}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: #1F4788; color: white; padding: 20px; text-align: center;">
+              <h1 style="margin: 0; font-size: 24px;">CONVOCATION</h1>
+            </div>
+
+            <div style="padding: 20px; background: #f8f9fa;">
+              <p style="font-size: 16px;">Bonjour <strong>${player.first_name} ${player.last_name}</strong>,</p>
+
+              <p>Vous êtes convoqué(e) pour le tournoi suivant :</p>
+
+              <div style="background: white; border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin: 20px 0;">
+                <p style="margin: 5px 0;"><strong>Catégorie :</strong> ${category.display_name}</p>
+                <p style="margin: 5px 0;"><strong>Compétition :</strong> ${tournamentLabel}</p>
+                <p style="margin: 5px 0; color: #dc3545; font-weight: bold;"><strong>Date :</strong> ${dateStr}</p>
+                <p style="margin: 5px 0; color: #dc3545; font-weight: bold;"><strong>Heure :</strong> ${playerLocation?.startTime?.replace(':', 'H') || '14H00'}</p>
+                <p style="margin: 5px 0;"><strong>Lieu :</strong> ${playerLocation?.name || 'À définir'}</p>
+                ${playerLocation?.street ? `<p style="margin: 5px 0; color: #666;">${[playerLocation.street, playerLocation.zip_code, playerLocation.city].filter(Boolean).join(' ')}</p>` : ''}
+                <p style="margin: 5px 0;"><strong>Poule :</strong> ${playerPoule.pouleNumber}</p>
+              </div>
+
+              <p>Veuillez trouver ci-joint votre convocation détaillée avec la composition de votre poule.</p>
+
+              <p style="margin-top: 20px;">Cordialement,<br><strong>Comité Départemental Billard Hauts-de-Seine</strong></p>
+            </div>
+
+            <div style="background: #1F4788; color: white; padding: 10px; text-align: center; font-size: 12px;">
+              <p style="margin: 0;">CDBHS - cdbhs92@gmail.com</p>
+            </div>
+          </div>
+        `,
+        attachments: [{
+          filename: `Convocation_${player.last_name}_${player.first_name}_${category.display_name.replace(/\s+/g, '_')}_T${tournament}.xlsx`,
+          content: buffer
+        }]
+      };
+
+      await transporter.sendMail(mailOptions);
+
+      results.sent.push({
+        name: `${player.first_name} ${player.last_name}`,
+        email: player.email
+      });
+
+    } catch (error) {
+      console.error(`Error sending email to ${player.email}:`, error);
+      results.failed.push({
+        name: `${player.first_name} ${player.last_name}`,
+        email: player.email,
+        error: error.message
+      });
+    }
+  }
+
+  res.json({
+    success: true,
+    message: `Emails envoyés: ${results.sent.length}, Échecs: ${results.failed.length}, Ignorés: ${results.skipped.length}`,
+    results
+  });
+});
+
+// Test email configuration
+router.post('/test', authenticateToken, async (req, res) => {
+  const { testEmail } = req.body;
+
+  if (!process.env.SMTP_PASS) {
+    return res.status(500).json({
+      error: 'Email not configured. Please set SMTP_PASS environment variable.'
+    });
+  }
+
+  const transporter = createTransporter();
+
+  try {
+    await transporter.verify();
+
+    await transporter.sendMail({
+      from: {
+        name: 'Comité Départemental Billard Hauts-de-Seine',
+        address: process.env.SMTP_USER || 'cdbhs92@gmail.com'
+      },
+      to: testEmail || process.env.SMTP_USER,
+      subject: 'Test - Configuration Email CDBHS',
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px;">
+          <h2 style="color: #1F4788;">Configuration Email Réussie</h2>
+          <p>Ce message confirme que la configuration email du système CDBHS fonctionne correctement.</p>
+          <p>Date du test: ${new Date().toLocaleString('fr-FR')}</p>
+        </div>
+      `
+    });
+
+    res.json({ success: true, message: 'Email de test envoyé avec succès' });
+  } catch (error) {
+    console.error('Email test error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+module.exports = router;
