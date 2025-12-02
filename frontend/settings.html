@@ -903,35 +903,48 @@
 
       const modeLabels = { 'LIBRE': 'LIBRE', 'CADRE': 'CADRE', 'BANDE': 'BANDE', '3BANDES': '3 BANDES' };
 
-      const newCoin = prompt(`Type de coin pour ${modeLabels[param.mode]} ${param.categorie}\n(GC = Grand Coin, PC = Petit Coin)\n\nActuel: ${param.coin}`, param.coin);
-      if (newCoin === null) return;
-      if (newCoin !== 'GC' && newCoin !== 'PC') {
-        alert('Le coin doit être GC ou PC');
+      // Fill the modal form with current values
+      document.getElementById('editParamId').value = id;
+      document.getElementById('editParamTitle').textContent = `${modeLabels[param.mode] || param.mode} - ${param.categorie}`;
+      document.getElementById('editParamCoin').value = param.coin;
+      document.getElementById('editParamDistNorm').value = param.distance_normale;
+      document.getElementById('editParamDistRed').value = param.distance_reduite || '';
+      document.getElementById('editParamReprises').value = param.reprises;
+      document.getElementById('editParamMoyMini').value = parseFloat(param.moyenne_mini).toFixed(3);
+      document.getElementById('editParamMoyMaxi').value = parseFloat(param.moyenne_maxi).toFixed(3);
+
+      // Show the modal
+      document.getElementById('editParamModal').style.display = 'flex';
+    }
+
+    function closeEditParamModal() {
+      document.getElementById('editParamModal').style.display = 'none';
+    }
+
+    function saveGameParameter() {
+      const id = parseInt(document.getElementById('editParamId').value);
+      const coin = document.getElementById('editParamCoin').value;
+      const distNorm = document.getElementById('editParamDistNorm').value;
+      const distRed = document.getElementById('editParamDistRed').value;
+      const reprises = document.getElementById('editParamReprises').value;
+      const moyMini = document.getElementById('editParamMoyMini').value;
+      const moyMaxi = document.getElementById('editParamMoyMaxi').value;
+
+      if (!distNorm || !reprises || moyMini === '' || moyMaxi === '') {
+        alert('Veuillez remplir tous les champs obligatoires');
         return;
       }
 
-      const newDistNorm = prompt(`Distance normale (points):\n\nActuel: ${param.distance_normale}`, param.distance_normale);
-      if (newDistNorm === null) return;
-
-      const newDistRed = prompt(`Distance réduite (points) - laisser vide si non applicable:\n\nActuel: ${param.distance_reduite || 'Aucune'}`, param.distance_reduite || '');
-
-      const newReprises = prompt(`Nombre de reprises maximum:\n\nActuel: ${param.reprises}`, param.reprises);
-      if (newReprises === null) return;
-
-      const newMoyMini = prompt(`Moyenne qualificative minimum:\n\nActuel: ${parseFloat(param.moyenne_mini).toFixed(3)}`, parseFloat(param.moyenne_mini).toFixed(3));
-      if (newMoyMini === null) return;
-
-      const newMoyMaxi = prompt(`Moyenne qualificative maximum:\n\nActuel: ${parseFloat(param.moyenne_maxi).toFixed(3)}`, parseFloat(param.moyenne_maxi).toFixed(3));
-      if (newMoyMaxi === null) return;
-
       updateGameParameter(id, {
-        coin: newCoin.toUpperCase(),
-        distance_normale: parseInt(newDistNorm),
-        distance_reduite: newDistRed ? parseInt(newDistRed) : null,
-        reprises: parseInt(newReprises),
-        moyenne_mini: parseFloat(newMoyMini),
-        moyenne_maxi: parseFloat(newMoyMaxi)
+        coin: coin,
+        distance_normale: parseInt(distNorm),
+        distance_reduite: distRed ? parseInt(distRed) : null,
+        reprises: parseInt(reprises),
+        moyenne_mini: parseFloat(moyMini),
+        moyenne_maxi: parseFloat(moyMaxi)
       });
+
+      closeEditParamModal();
     }
 
     // Update game parameter
@@ -1078,5 +1091,55 @@ Comite Departemental Billard Hauts-de-Seine`
 
     // ============= END EMAIL TEMPLATE MANAGEMENT =============
   </script>
+
+  <!-- Edit Game Parameter Modal -->
+  <div id="editParamModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: white; padding: 30px; border-radius: 12px; max-width: 500px; width: 90%; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+      <h3 style="margin: 0 0 20px 0; color: #1F4788;">Modifier les parametres</h3>
+      <h4 id="editParamTitle" style="margin: 0 0 20px 0; color: #333; background: #f8f9fa; padding: 10px; border-radius: 6px; text-align: center;"></h4>
+
+      <input type="hidden" id="editParamId">
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">Coin *</label>
+          <select id="editParamCoin" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+            <option value="GC">GC (Grand Coin)</option>
+            <option value="PC">PC (Petit Coin)</option>
+          </select>
+        </div>
+
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">Reprises *</label>
+          <input type="number" id="editParamReprises" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; box-sizing: border-box;" required>
+        </div>
+
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">Distance Normale *</label>
+          <input type="number" id="editParamDistNorm" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; box-sizing: border-box;" required>
+        </div>
+
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">Distance Reduite</label>
+          <input type="number" id="editParamDistRed" placeholder="Optionnel" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; box-sizing: border-box;">
+        </div>
+
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">Moyenne Mini *</label>
+          <input type="number" id="editParamMoyMini" step="0.001" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; box-sizing: border-box;" required>
+        </div>
+
+        <div>
+          <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">Moyenne Maxi *</label>
+          <input type="number" id="editParamMoyMaxi" step="0.001" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; box-sizing: border-box;" required>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 10px; margin-top: 25px;">
+        <button onclick="saveGameParameter()" class="btn" style="flex: 1; background: #28a745; padding: 12px; font-size: 14px;">Enregistrer</button>
+        <button onclick="closeEditParamModal()" class="btn" style="flex: 1; background: #6c757d; padding: 12px; font-size: 14px;">Annuler</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
