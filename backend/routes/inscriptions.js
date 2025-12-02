@@ -321,38 +321,73 @@ router.get('/tournoi', authenticateToken, async (req, res) => {
 
 // Get last import dates for all file types
 router.get('/last-import', authenticateToken, (req, res) => {
-  // Get the most recent import for each file type from import_history table
+  // Get the most recent import for each file type from import_history
   const query = `
     SELECT DISTINCT ON (file_type)
-      file_type, import_date, record_count, filename, imported_by
+      file_type,
+      import_date,
+      record_count,
+      filename,
+      imported_by
     FROM import_history
     ORDER BY file_type, import_date DESC
   `;
 
   db.all(query, [], (err, rows) => {
     if (err) {
-      console.error('Error fetching import history:', err);
-      // Fallback to old approach if import_history table doesn't exist yet
+      // Fallback to old method if import_history table doesn't exist yet
+      console.error('Error fetching import history, falling back to old method:', err);
+
+      // Fallback: get max created_at from each table
       const fallbackQuery = `
-        SELECT MAX(created_at) as last_import_date,
-               COUNT(*) as total_inscriptions
+        SELECT
+          'inscriptions' as file_type,
+          MAX(created_at) as import_date,
+          COUNT(*) as record_count
         FROM inscriptions
+        UNION ALL
+        SELECT
+          'tournois' as file_type,
+          MAX(created_at) as import_date,
+          COUNT(*) as record_count
+        FROM tournoi_ext
+        UNION ALL
+        SELECT
+          'joueurs' as file_type,
+          NULL as import_date,
+          COUNT(*) as record_count
+        FROM players
       `;
-      db.get(fallbackQuery, [], (fallbackErr, fallbackRow) => {
+
+      db.all(fallbackQuery, [], (fallbackErr, fallbackRows) => {
         if (fallbackErr) {
           return res.status(500).json({ error: fallbackErr.message });
         }
-        res.json({
-          imports: [{
-            file_type: 'inscriptions',
-            import_date: fallbackRow?.last_import_date || null,
-            record_count: fallbackRow?.total_inscriptions || 0
-          }]
+
+        const result = {};
+        (fallbackRows || []).forEach(row => {
+          result[row.file_type] = {
+            importDate: row.import_date,
+            recordCount: row.record_count
+          };
         });
+        res.json(result);
       });
       return;
     }
-    res.json({ imports: rows || [] });
+
+    // Transform rows to object keyed by file_type
+    const result = {};
+    (rows || []).forEach(row => {
+      result[row.file_type] = {
+        importDate: row.import_date,
+        recordCount: row.record_count,
+        filename: row.filename,
+        importedBy: row.imported_by
+      };
+    });
+
+    res.json(result);
   });
 });
 
@@ -523,79 +558,6 @@ router.get('/', authenticateToken, (req, res) => {
     res.json(rows);
   });
 });
-
-// ============= NEW ROUTES FOR TOURNOIS AND INSCRIPTIONS VIEWS =============
-
-// Get all external tournaments (alias route for new view page)
-router.get('/tournois-ext', authenticateToken, (req, res) => {
-  const query = 'SELECT * FROM tournoi_ext ORDER BY debut DESC, mode, categorie';
-
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows);
-  });
-});
-
-// Update a tournament
-router.put('/tournois-ext/:id', authenticateToken, (req, res) => {
-  const tournoiId = parseInt(req.params.id);
-  const { nom, mode, categorie, debut, fin, lieu, taille, taille_cadre, grand_coin } = req.body;
-
-  const query = `
-    UPDATE tournoi_ext
-    SET nom = $1, mode = $2, categorie = $3, debut = $4, fin = $5,
-        lieu = $6, taille = $7, taille_cadre = $8, grand_coin = $9
-    WHERE tournoi_id = $10
-  `;
-
-  db.run(query, [nom, mode, categorie, debut, fin, lieu, taille, taille_cadre, grand_coin || 0, tournoiId], function(err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    if (this.changes === 0) {
-      return res.status(404).json({ error: 'Tournoi not found' });
-    }
-    res.json({ success: true, message: 'Tournoi updated successfully' });
-  });
-});
-
-// Get all inscriptions (for new view page)
-router.get('/inscriptions-ext', authenticateToken, (req, res) => {
-  const query = 'SELECT * FROM inscriptions ORDER BY timestamp DESC';
-
-  db.all(query, [], (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows);
-  });
-});
-
-// Update an inscription
-router.put('/inscriptions-ext/:id', authenticateToken, (req, res) => {
-  const inscriptionId = parseInt(req.params.id);
-  const { licence, email, telephone, convoque, forfait, commentaire } = req.body;
-
-  const query = `
-    UPDATE inscriptions
-    SET licence = $1, email = $2, telephone = $3, convoque = $4, forfait = $5, commentaire = $6
-    WHERE inscription_id = $7
-  `;
-
-  db.run(query, [licence, email, telephone, convoque, forfait, commentaire, inscriptionId], function(err) {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    if (this.changes === 0) {
-      return res.status(404).json({ error: 'Inscription not found' });
-    }
-    res.json({ success: true, message: 'Inscription updated successfully' });
-  });
-});
-
-// ============= END NEW ROUTES =============
 
 // Delete all tournoi_ext
 router.delete('/tournoi/all', authenticateToken, (req, res) => {
@@ -820,382 +782,6 @@ router.post('/generate-poules', authenticateToken, async (req, res) => {
       { width: 18 }   // Classement/Poule
     ];
 
-    // ==========================================
-    // CONVOCATION WORKSHEET
-    // ==========================================
-    const convocationSheet = workbook.addWorksheet('Convocation');
-    const locations = req.body.locations || [];
-
-    // Get location info for each poule
-    const getLocationForPoule = (poule) => {
-      const locNum = poule.locationNum || '1';
-      return locations.find(l => l.locationNum === locNum) || locations[0] || null;
-    };
-
-    // HEADER: Season
-    convocationSheet.mergeCells('A1:F1');
-    convocationSheet.getCell('A1').value = `SAISON ${season}`;
-    convocationSheet.getCell('A1').font = { size: 16, bold: true };
-    convocationSheet.getCell('A1').alignment = { horizontal: 'center' };
-    convocationSheet.getRow(1).height = 30;
-
-    // HEADER: Date in red
-    convocationSheet.mergeCells('A3:F3');
-    const dateStrFull = tournamentDate
-      ? new Date(tournamentDate).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase()
-      : 'DATE À DÉFINIR';
-    convocationSheet.getCell('A3').value = dateStrFull;
-    convocationSheet.getCell('A3').font = { size: 14, bold: true, color: { argb: 'FFFF0000' } };
-    convocationSheet.getCell('A3').alignment = { horizontal: 'center' };
-    convocationSheet.getRow(3).height = 25;
-
-    // HEADER: Tournament info
-    convocationSheet.mergeCells('A5:C5');
-    convocationSheet.getCell('A5').value = `TOURNOI N° ${tournament}`;
-    convocationSheet.getCell('A5').font = { size: 12, bold: true };
-    convocationSheet.getCell('A5').border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-
-    convocationSheet.mergeCells('D5:F5');
-    convocationSheet.getCell('D5').value = category.display_name;
-    convocationSheet.getCell('D5').font = { size: 12, bold: true };
-    convocationSheet.getCell('D5').border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-
-    let convRow = 8;
-
-    // Each poule with its location
-    poules.forEach((poule, pouleIndex) => {
-      const loc = getLocationForPoule(poule);
-      const locName = loc?.name || tournamentLieu || 'À définir';
-      const locStreet = loc?.street || '';
-      const locZipCode = loc?.zip_code || '';
-      const locCity = loc?.city || '';
-      const fullAddress = [locName, locStreet, locZipCode, locCity].filter(Boolean).join(' ');
-      const locPhone = loc?.phone || '';
-      const locEmail = loc?.email || '';
-      const locTime = loc?.startTime || '14:00';
-
-      // "Au Club de" header
-      convocationSheet.mergeCells(`A${convRow}:B${convRow}`);
-      convocationSheet.getCell(`A${convRow}`).value = 'Au Club de';
-      convocationSheet.getCell(`A${convRow}`).font = { bold: true };
-      convocationSheet.getCell(`A${convRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } };
-      convocationSheet.getCell(`A${convRow}`).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-
-      convocationSheet.mergeCells(`C${convRow}:F${convRow}`);
-      convocationSheet.getCell(`C${convRow}`).value = fullAddress.toUpperCase();
-      convocationSheet.getCell(`C${convRow}`).font = { bold: true };
-      convocationSheet.getCell(`C${convRow}`).alignment = { horizontal: 'center' };
-      convocationSheet.getCell(`C${convRow}`).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-      convRow++;
-
-      // Heure + Téléphone + Mail row
-      convocationSheet.getCell(`A${convRow}`).value = 'Heure';
-      convocationSheet.getCell(`A${convRow}`).font = { bold: true };
-      convocationSheet.getCell(`A${convRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } };
-      convocationSheet.getCell(`A${convRow}`).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-
-      convocationSheet.getCell(`B${convRow}`).value = locTime.replace(':', 'H');
-      convocationSheet.getCell(`B${convRow}`).font = { bold: true, color: { argb: 'FFFF0000' } };
-      convocationSheet.getCell(`B${convRow}`).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-
-      convocationSheet.getCell(`C${convRow}`).value = `Téléphone  ${locPhone}`;
-      convocationSheet.getCell(`C${convRow}`).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-
-      convocationSheet.mergeCells(`D${convRow}:F${convRow}`);
-      convocationSheet.getCell(`D${convRow}`).value = `Mail  ${locEmail}`;
-      convocationSheet.getCell(`D${convRow}`).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-      convRow++;
-
-      // POULE header
-      convocationSheet.mergeCells(`A${convRow}:F${convRow}`);
-      convocationSheet.getCell(`A${convRow}`).value = `POULE ${poule.number}`;
-      convocationSheet.getCell(`A${convRow}`).font = { bold: true };
-      convocationSheet.getCell(`A${convRow}`).alignment = { horizontal: 'left' };
-      convRow++;
-
-      // Column headers
-      const headerCols = ['Rang', 'n° licence', 'Nom', 'Prénom', 'n°', 'CLUB'];
-      headerCols.forEach((header, i) => {
-        const col = String.fromCharCode(65 + i); // A, B, C, D, E, F
-        convocationSheet.getCell(`${col}${convRow}`).value = header;
-        convocationSheet.getCell(`${col}${convRow}`).font = { bold: true, size: 10 };
-        convocationSheet.getCell(`${col}${convRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD3D3D3' } };
-        convocationSheet.getCell(`${col}${convRow}`).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-      });
-      convRow++;
-
-      // Players
-      poule.players.forEach((player) => {
-        convocationSheet.getCell(`A${convRow}`).value = player.finalRank || player.originalRank;
-        convocationSheet.getCell(`A${convRow}`).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-
-        convocationSheet.getCell(`B${convRow}`).value = player.licence;
-        convocationSheet.getCell(`B${convRow}`).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-
-        convocationSheet.getCell(`C${convRow}`).value = player.last_name?.toUpperCase();
-        convocationSheet.getCell(`C${convRow}`).font = { bold: true };
-        convocationSheet.getCell(`C${convRow}`).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-
-        convocationSheet.getCell(`D${convRow}`).value = player.first_name?.toUpperCase();
-        convocationSheet.getCell(`D${convRow}`).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-
-        convocationSheet.getCell(`E${convRow}`).value = ''; // n° - placeholder
-        convocationSheet.getCell(`E${convRow}`).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-
-        convocationSheet.getCell(`F${convRow}`).value = player.club?.toUpperCase() || '';
-        convocationSheet.getCell(`F${convRow}`).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-
-        convRow++;
-      });
-
-      // Note about same club players
-      if (pouleIndex < poules.length - 1) {
-        convocationSheet.mergeCells(`A${convRow}:F${convRow}`);
-        convocationSheet.getCell(`A${convRow}`).value = "Les joueurs d'un même club jouent ensemble au 1er tour";
-        convocationSheet.getCell(`A${convRow}`).font = { italic: true, size: 10, color: { argb: 'FF666666' } };
-        convocationSheet.getCell(`A${convRow}`).alignment = { horizontal: 'center' };
-        convRow += 2;
-      }
-    });
-
-    // Set convocation column widths
-    convocationSheet.columns = [
-      { width: 8 },   // Rang
-      { width: 12 },  // Licence
-      { width: 18 },  // Nom
-      { width: 15 },  // Prénom
-      { width: 8 },   // n°
-      { width: 25 }   // Club
-    ];
-
-    // ==========================================
-    // CONVOCATION V2 - IMPROVED DESIGN
-    // ==========================================
-    const convV2 = workbook.addWorksheet('Convocation v2');
-
-    // Page setup for A4 printing - fit everything on 1 page
-    convV2.pageSetup = {
-      paperSize: 9,  // A4
-      orientation: 'portrait',
-      fitToPage: true,
-      fitToWidth: 1,
-      fitToHeight: 1,  // Force to 1 page
-      margins: {
-        left: 0.4,
-        right: 0.4,
-        top: 0.4,
-        bottom: 0.4,
-        header: 0.2,
-        footer: 0.2
-      }
-    };
-
-    // Define colors
-    const colors = {
-      primary: 'FF1F4788',      // Dark blue
-      secondary: 'FF667EEA',    // Purple
-      accent: 'FFFFC107',       // Yellow/Gold
-      light: 'FFF8F9FA',        // Light gray
-      white: 'FFFFFFFF',
-      red: 'FFDC3545',
-      darkText: 'FF333333',
-      lightText: 'FF666666'
-    };
-
-    // Set column widths - enlarged for better A4 coverage
-    convV2.columns = [
-      { width: 10 },   // A - Rang
-      { width: 16 },   // B - Licence
-      { width: 28 },   // C - Nom
-      { width: 24 },   // D - Prénom
-      { width: 45 },   // E - Club
-      { width: 5 }     // F - empty/padding
-    ];
-
-    // Define standard black border for all cells
-    const blackBorder = {
-      top: { style: 'thin', color: { argb: 'FF000000' } },
-      left: { style: 'thin', color: { argb: 'FF000000' } },
-      bottom: { style: 'thin', color: { argb: 'FF000000' } },
-      right: { style: 'thin', color: { argb: 'FF000000' } }
-    };
-
-    let v2Row = 1;
-
-    // === HEADER SECTION ===
-    // Convocation title
-    convV2.mergeCells(`A${v2Row}:E${v2Row}`);
-    convV2.getCell(`A${v2Row}`).value = `CONVOCATION TOURNOI N°${tournament}`;
-    convV2.getCell(`A${v2Row}`).font = { size: 24, bold: true, color: { argb: colors.white } };
-    convV2.getCell(`A${v2Row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.primary } };
-    convV2.getCell(`A${v2Row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-    convV2.getCell(`A${v2Row}`).border = blackBorder;
-    convV2.getRow(v2Row).height = 50;
-    v2Row++;
-
-    // Season banner
-    convV2.mergeCells(`A${v2Row}:E${v2Row}`);
-    convV2.getCell(`A${v2Row}`).value = `SAISON ${season}`;
-    convV2.getCell(`A${v2Row}`).font = { size: 16, bold: true, color: { argb: colors.white } };
-    convV2.getCell(`A${v2Row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.secondary } };
-    convV2.getCell(`A${v2Row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-    convV2.getCell(`A${v2Row}`).border = blackBorder;
-    convV2.getRow(v2Row).height = 35;
-    v2Row++;
-
-    // Empty row
-    convV2.getRow(v2Row).height = 15;
-    v2Row++;
-
-    // Date - prominent display
-    convV2.mergeCells(`A${v2Row}:E${v2Row}`);
-    const v2DateStr = tournamentDate
-      ? new Date(tournamentDate).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase()
-      : 'DATE À DÉFINIR';
-    convV2.getCell(`A${v2Row}`).value = v2DateStr;
-    convV2.getCell(`A${v2Row}`).font = { size: 18, bold: true, color: { argb: colors.red } };
-    convV2.getCell(`A${v2Row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-    convV2.getCell(`A${v2Row}`).border = blackBorder;
-    convV2.getRow(v2Row).height = 35;
-    v2Row++;
-
-    // Empty row
-    convV2.getRow(v2Row).height = 15;
-    v2Row++;
-
-    // Category info box (full width since tournament number is now in title)
-    convV2.mergeCells(`A${v2Row}:E${v2Row}`);
-    convV2.getCell(`A${v2Row}`).value = category.display_name;
-    convV2.getCell(`A${v2Row}`).font = { size: 16, bold: true, color: { argb: colors.white } };
-    convV2.getCell(`A${v2Row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.secondary } };
-    convV2.getCell(`A${v2Row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-    convV2.getCell(`A${v2Row}`).border = blackBorder;
-    convV2.getRow(v2Row).height = 35;
-    v2Row++;
-
-    // Space before poules
-    v2Row += 1;
-
-    // === POULES SECTION ===
-    poules.forEach((poule, pouleIndex) => {
-      const loc = getLocationForPoule(poule);
-      const locName = loc?.name || tournamentLieu || 'À définir';
-      const locStreet = loc?.street || '';
-      const locZipCode = loc?.zip_code || '';
-      const locCity = loc?.city || '';
-      const fullAddress = [locStreet, locZipCode, locCity].filter(Boolean).join(' ');
-      const locPhone = loc?.phone || '';
-      const locEmail = loc?.email || '';
-      const locTime = loc?.startTime || '14:00';
-
-      // Location header bar
-      convV2.mergeCells(`A${v2Row}:E${v2Row}`);
-      convV2.getCell(`A${v2Row}`).value = `📍 ${locName.toUpperCase()}`;
-      convV2.getCell(`A${v2Row}`).font = { size: 14, bold: true, color: { argb: colors.darkText } };
-      convV2.getCell(`A${v2Row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.accent } };
-      convV2.getCell(`A${v2Row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-      convV2.getCell(`A${v2Row}`).border = blackBorder;
-      convV2.getRow(v2Row).height = 32;
-      v2Row++;
-
-      // Address line
-      if (fullAddress) {
-        convV2.mergeCells(`A${v2Row}:E${v2Row}`);
-        convV2.getCell(`A${v2Row}`).value = fullAddress;
-        convV2.getCell(`A${v2Row}`).font = { size: 12, color: { argb: colors.darkText } };
-        convV2.getCell(`A${v2Row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.accent } };
-        convV2.getCell(`A${v2Row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-        convV2.getCell(`A${v2Row}`).border = blackBorder;
-        convV2.getRow(v2Row).height = 26;
-        v2Row++;
-      }
-
-      // Time and contact info row
-      convV2.getCell(`A${v2Row}`).value = '🕐';
-      convV2.getCell(`A${v2Row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-      convV2.getCell(`A${v2Row}`).border = blackBorder;
-      convV2.getCell(`B${v2Row}`).value = locTime.replace(':', 'H');
-      convV2.getCell(`B${v2Row}`).font = { size: 14, bold: true, color: { argb: colors.red } };
-      convV2.getCell(`B${v2Row}`).alignment = { vertical: 'middle' };
-      convV2.getCell(`B${v2Row}`).border = blackBorder;
-      convV2.getCell(`C${v2Row}`).value = locPhone ? `📞 ${locPhone}` : '';
-      convV2.getCell(`C${v2Row}`).font = { size: 11, color: { argb: colors.lightText } };
-      convV2.getCell(`C${v2Row}`).alignment = { vertical: 'middle' };
-      convV2.getCell(`C${v2Row}`).border = blackBorder;
-      convV2.mergeCells(`D${v2Row}:E${v2Row}`);
-      convV2.getCell(`D${v2Row}`).value = locEmail ? `✉️ ${locEmail}` : '';
-      convV2.getCell(`D${v2Row}`).font = { size: 11, color: { argb: colors.lightText } };
-      convV2.getCell(`D${v2Row}`).alignment = { vertical: 'middle' };
-      convV2.getCell(`D${v2Row}`).border = blackBorder;
-      convV2.getRow(v2Row).height = 28;
-      v2Row++;
-
-      // Poule title
-      convV2.mergeCells(`A${v2Row}:E${v2Row}`);
-      convV2.getCell(`A${v2Row}`).value = `POULE ${poule.number}`;
-      convV2.getCell(`A${v2Row}`).font = { size: 14, bold: true, color: { argb: colors.white } };
-      convV2.getCell(`A${v2Row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.primary } };
-      convV2.getCell(`A${v2Row}`).alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
-      convV2.getCell(`A${v2Row}`).border = blackBorder;
-      convV2.getRow(v2Row).height = 30;
-      v2Row++;
-
-      // Table headers
-      const v2Headers = ['#', 'Licence', 'Nom', 'Prénom', 'Club'];
-      v2Headers.forEach((header, i) => {
-        const col = String.fromCharCode(65 + i);
-        convV2.getCell(`${col}${v2Row}`).value = header;
-        convV2.getCell(`${col}${v2Row}`).font = { size: 11, bold: true, color: { argb: colors.white } };
-        convV2.getCell(`${col}${v2Row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.secondary } };
-        convV2.getCell(`${col}${v2Row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-        convV2.getCell(`${col}${v2Row}`).border = blackBorder;
-      });
-      convV2.getRow(v2Row).height = 28;
-      v2Row++;
-
-      // Players with alternating colors
-      poule.players.forEach((player, pIndex) => {
-        const isEven = pIndex % 2 === 0;
-        const rowColor = isEven ? colors.white : colors.light;
-
-        convV2.getCell(`A${v2Row}`).value = player.finalRank || '';
-        convV2.getCell(`B${v2Row}`).value = player.licence || '';
-        convV2.getCell(`C${v2Row}`).value = (player.last_name || '').toUpperCase();
-        convV2.getCell(`C${v2Row}`).font = { bold: true, size: 11 };
-        convV2.getCell(`D${v2Row}`).value = player.first_name || '';
-        convV2.getCell(`D${v2Row}`).font = { size: 11 };
-        convV2.getCell(`E${v2Row}`).value = player.club || '';
-        convV2.getCell(`E${v2Row}`).font = { size: 10 };
-
-        // Apply styling to all cells in row
-        ['A', 'B', 'C', 'D', 'E'].forEach(col => {
-          convV2.getCell(`${col}${v2Row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowColor } };
-          convV2.getCell(`${col}${v2Row}`).border = blackBorder;
-          convV2.getCell(`${col}${v2Row}`).alignment = { vertical: 'middle' };
-        });
-        convV2.getCell(`A${v2Row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-        convV2.getCell(`B${v2Row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-        convV2.getRow(v2Row).height = 26;
-        v2Row++;
-      });
-
-      // Note about same club
-      convV2.mergeCells(`A${v2Row}:E${v2Row}`);
-      convV2.getCell(`A${v2Row}`).value = "ℹ️ Les joueurs d'un même club jouent ensemble au 1er tour";
-      convV2.getCell(`A${v2Row}`).font = { size: 10, italic: true, color: { argb: colors.lightText } };
-      convV2.getCell(`A${v2Row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-      convV2.getRow(v2Row).height = 24;
-      v2Row += 2;
-    });
-
-    // Footer
-    v2Row++;
-    convV2.mergeCells(`A${v2Row}:E${v2Row}`);
-    convV2.getCell(`A${v2Row}`).value = `Document généré le ${new Date().toLocaleDateString('fr-FR')} • CDBHS`;
-    convV2.getCell(`A${v2Row}`).font = { size: 10, italic: true, color: { argb: colors.lightText } };
-    convV2.getCell(`A${v2Row}`).alignment = { horizontal: 'center', vertical: 'middle' };
-    convV2.getRow(v2Row).height = 25;
-
     // Send file
     res.setHeader(
       'Content-Type',
@@ -1250,5 +836,74 @@ function generateMatchSchedule(pouleSize) {
   }
   return matches;
 }
+
+// Update a tournament (admin only)
+router.put('/tournoi/:id', authenticateToken, (req, res) => {
+  // Check admin role
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const { id } = req.params;
+  const { nom, mode, categorie, taille, debut, fin, grand_coin, taille_cadre, lieu } = req.body;
+
+  const query = `
+    UPDATE tournoi_ext SET
+      nom = $1,
+      mode = $2,
+      categorie = $3,
+      taille = $4,
+      debut = $5,
+      fin = $6,
+      grand_coin = $7,
+      taille_cadre = $8,
+      lieu = $9
+    WHERE tournoi_id = $10
+  `;
+
+  db.run(query, [nom, mode, categorie, taille || null, debut || null, fin || null, grand_coin || 0, taille_cadre, lieu, id], function(err) {
+    if (err) {
+      console.error('Error updating tournament:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+    res.json({ success: true, message: 'Tournament updated' });
+  });
+});
+
+// Update an inscription (admin only)
+router.put('/:id', authenticateToken, (req, res) => {
+  // Check admin role
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const { id } = req.params;
+  const { licence, email, telephone, convoque, forfait, commentaire } = req.body;
+
+  const query = `
+    UPDATE inscriptions SET
+      licence = $1,
+      email = $2,
+      telephone = $3,
+      convoque = $4,
+      forfait = $5,
+      commentaire = $6
+    WHERE inscription_id = $7
+  `;
+
+  db.run(query, [licence, email, telephone, convoque || 0, forfait || 0, commentaire, id], function(err) {
+    if (err) {
+      console.error('Error updating inscription:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Inscription not found' });
+    }
+    res.json({ success: true, message: 'Inscription updated' });
+  });
+});
 
 module.exports = router;

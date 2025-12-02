@@ -16,8 +16,56 @@ const getResend = () => {
   return new Resend(process.env.RESEND_API_KEY);
 };
 
+// Fetch ranking data for players in a category/season
+async function getRankingDataForCategory(categoryId, season) {
+  const db = require('../db-loader');
+
+  return new Promise((resolve) => {
+    const query = `
+      SELECT
+        r.licence,
+        r.rank_position,
+        COALESCE((SELECT SUM(tr.points) FROM tournament_results tr
+                  JOIN tournaments t ON tr.tournament_id = t.id
+                  WHERE REPLACE(tr.licence, ' ', '') = REPLACE(r.licence, ' ', '')
+                  AND t.category_id = r.category_id
+                  AND t.season = r.season
+                  AND t.tournament_number <= 3), 0) as cumulated_points,
+        COALESCE((SELECT SUM(tr.reprises) FROM tournament_results tr
+                  JOIN tournaments t ON tr.tournament_id = t.id
+                  WHERE REPLACE(tr.licence, ' ', '') = REPLACE(r.licence, ' ', '')
+                  AND t.category_id = r.category_id
+                  AND t.season = r.season
+                  AND t.tournament_number <= 3), 0) as cumulated_reprises
+      FROM rankings r
+      WHERE r.category_id = $1 AND r.season = $2
+    `;
+
+    db.all(query, [categoryId, season], (err, rows) => {
+      if (err) {
+        console.error('Error fetching ranking data:', err);
+        resolve({});
+      } else {
+        // Build a map by licence (normalized)
+        const rankingMap = {};
+        (rows || []).forEach(r => {
+          const normLicence = (r.licence || '').replace(/\s+/g, '');
+          const moyenne = r.cumulated_reprises > 0
+            ? (r.cumulated_points / r.cumulated_reprises).toFixed(3)
+            : null;
+          rankingMap[normLicence] = {
+            rank: r.rank_position,
+            moyenne: moyenne
+          };
+        });
+        resolve(rankingMap);
+      }
+    });
+  });
+}
+
 // Generate PDF convocation for a specific player - includes ALL poules
-async function generatePlayerConvocationPDF(player, tournamentInfo, allPoules, locations, gameParams, selectedDistance) {
+async function generatePlayerConvocationPDF(player, tournamentInfo, allPoules, locations, gameParams, selectedDistance, rankingData = {}) {
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({
@@ -145,14 +193,16 @@ async function generatePlayerConvocationPDF(player, tournamentInfo, allPoules, l
            .text(pouleTitle, 50, y + 5);
         y += 26;
 
-        // Table headers
+        // Table headers - with ranking columns
         doc.rect(40, y, pageWidth, 20).fill(secondaryColor);
-        doc.fillColor('white').fontSize(9).font('Helvetica-Bold');
-        doc.text('#', 45, y + 5, { width: 25 });
-        doc.text('Licence', 70, y + 5, { width: 70 });
-        doc.text('Nom', 145, y + 5, { width: 120 });
-        doc.text('Prenom', 270, y + 5, { width: 100 });
-        doc.text('Club', 375, y + 5, { width: 160 });
+        doc.fillColor('white').fontSize(8).font('Helvetica-Bold');
+        doc.text('#', 45, y + 5, { width: 20 });
+        doc.text('Licence', 65, y + 5, { width: 60 });
+        doc.text('Nom', 130, y + 5, { width: 100 });
+        doc.text('Prenom', 235, y + 5, { width: 80 });
+        doc.text('Club', 320, y + 5, { width: 120 });
+        doc.text('Moy.', 445, y + 5, { width: 40, align: 'center' });
+        doc.text('Class.', 490, y + 5, { width: 40, align: 'center' });
         y += 22;
 
         // Players
@@ -161,13 +211,21 @@ async function generatePlayerConvocationPDF(player, tournamentInfo, allPoules, l
           const isEven = pIndex % 2 === 0;
           const rowColor = isCurrentPlayer ? '#E3F2FD' : (isEven ? '#FFFFFF' : lightGray);
 
+          // Get ranking info for this player
+          const normLicence = (p.licence || '').replace(/\s+/g, '');
+          const playerRanking = rankingData[normLicence] || {};
+
           doc.rect(40, y, pageWidth, 20).fill(rowColor);
-          doc.fillColor('#333333').fontSize(9).font(isCurrentPlayer ? 'Helvetica-Bold' : 'Helvetica');
-          doc.text(String(pIndex + 1), 45, y + 5, { width: 25 });
-          doc.text(p.licence || '', 70, y + 5, { width: 70 });
-          doc.text((p.last_name || '').toUpperCase(), 145, y + 5, { width: 120 });
-          doc.text(p.first_name || '', 270, y + 5, { width: 100 });
-          doc.font('Helvetica').fontSize(8).text(p.club || '', 375, y + 6, { width: 160 });
+          doc.fillColor('#333333').fontSize(8).font(isCurrentPlayer ? 'Helvetica-Bold' : 'Helvetica');
+          doc.text(String(pIndex + 1), 45, y + 5, { width: 20 });
+          doc.text(p.licence || '', 65, y + 5, { width: 60 });
+          doc.text((p.last_name || '').toUpperCase(), 130, y + 5, { width: 100 });
+          doc.text(p.first_name || '', 235, y + 5, { width: 80 });
+          doc.font('Helvetica').fontSize(7).text(p.club || '', 320, y + 6, { width: 120 });
+          // Moyenne and Classement columns
+          doc.font(isCurrentPlayer ? 'Helvetica-Bold' : 'Helvetica').fontSize(8);
+          doc.text(playerRanking.moyenne || '-', 445, y + 5, { width: 40, align: 'center' });
+          doc.text(playerRanking.rank ? String(playerRanking.rank) : '-', 490, y + 5, { width: 40, align: 'center' });
           y += 20;
         });
 
@@ -248,7 +306,7 @@ function replaceTemplateVariables(template, variables) {
 
 // Send convocation emails
 router.post('/send-convocations', authenticateToken, async (req, res) => {
-  const { players, poules, category, season, tournament, tournamentDate, locations, sendToAll, specialNote, gameParams, selectedDistance } = req.body;
+  const { players, poules, category, season, tournament, tournamentDate, locations, sendToAll, specialNote, gameParams, selectedDistance, mockRankingData } = req.body;
 
   const resend = getResend();
   if (!resend) {
@@ -261,6 +319,18 @@ router.post('/send-convocations', authenticateToken, async (req, res) => {
 
   // Fetch email template
   const emailTemplate = await getEmailTemplate();
+
+  // Fetch ranking data for this category/season (or use mock data for testing)
+  let rankingData = {};
+  if (mockRankingData) {
+    // Use provided mock data for testing
+    rankingData = mockRankingData;
+    console.log('Using mock ranking data for testing');
+  } else if (category.id) {
+    // Fetch real ranking data
+    rankingData = await getRankingDataForCategory(category.id, season);
+    console.log(`Fetched ranking data for ${Object.keys(rankingData).length} players`);
+  }
 
   const results = {
     sent: [],
@@ -322,7 +392,8 @@ router.post('/send-convocations', authenticateToken, async (req, res) => {
         poules,
         locations,
         gameParams,
-        selectedDistance
+        selectedDistance,
+        rankingData
       );
 
       const base64Content = pdfBuffer.toString('base64');
@@ -462,14 +533,14 @@ router.post('/create-test-data', authenticateToken, async (req, res) => {
   const db = require('../db-loader');
 
   try {
-    // 1. Create 6 test players
+    // 1. Create 6 test players with ranking info
     const players = [
-      { licence: 'TEST001', first_name: 'John', last_name: 'Doe-1', club: 'Courbevoie' },
-      { licence: 'TEST002', first_name: 'John', last_name: 'Doe-2', club: 'Courbevoie' },
-      { licence: 'TEST003', first_name: 'John', last_name: 'Doe-3', club: 'Clichy' },
-      { licence: 'TEST004', first_name: 'John', last_name: 'Doe-4', club: 'Clichy' },
-      { licence: 'TEST005', first_name: 'John', last_name: 'Doe-5', club: 'Clamart' },
-      { licence: 'TEST006', first_name: 'John', last_name: 'Doe-6', club: 'Clamart' }
+      { licence: 'TEST001', first_name: 'John', last_name: 'Doe-1', club: 'Courbevoie', rank: 1, moyenne: '2.098' },
+      { licence: 'TEST002', first_name: 'John', last_name: 'Doe-2', club: 'Courbevoie', rank: 2, moyenne: '2.057' },
+      { licence: 'TEST003', first_name: 'John', last_name: 'Doe-3', club: 'Clichy', rank: 3, moyenne: '2.697' },
+      { licence: 'TEST004', first_name: 'John', last_name: 'Doe-4', club: 'Clichy', rank: 4, moyenne: '1.856' },
+      { licence: 'TEST005', first_name: 'John', last_name: 'Doe-5', club: 'Clamart', rank: 5, moyenne: '1.542' },
+      { licence: 'TEST006', first_name: 'John', last_name: 'Doe-6', club: 'Clamart', rank: 6, moyenne: '1.234' }
     ];
 
     for (const p of players) {
@@ -530,10 +601,20 @@ router.post('/create-test-data', authenticateToken, async (req, res) => {
       });
     }
 
+    // Build mock ranking data map to return for testing
+    const mockRankingData = {};
+    players.forEach(p => {
+      mockRankingData[p.licence] = {
+        rank: p.rank,
+        moyenne: p.moyenne
+      };
+    });
+
     res.json({
       success: true,
       message: 'Test data created: 6 players, 1 tournament (ID 9999), 6 inscriptions',
-      tournament_id: 9999
+      tournament_id: 9999,
+      mockRankingData: mockRankingData
     });
 
   } catch (error) {

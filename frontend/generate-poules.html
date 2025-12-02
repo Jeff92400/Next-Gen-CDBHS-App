@@ -285,11 +285,11 @@
         <div style="flex: 1;">
           <h3 style="margin: 0 0 10px 0; color: #856404;">Mise à jour des inscriptions</h3>
           <p style="margin: 0 0 10px 0; color: #856404;">
-            Avant de générer les poules, assurez-vous que le fichier des inscriptions est à jour depuis la base IONOS.
+            Avant de générer les poules, assurez-vous que les fichiers sont à jour depuis la base IONOS.
           </p>
-          <p id="lastImportInfo" style="margin: 0 0 15px 0; padding: 8px 12px; background: rgba(255,255,255,0.5); border-radius: 4px; font-weight: 500;">
-            <span style="color: #666;">Chargement...</span>
-          </p>
+          <div id="lastImportInfo" style="margin: 0 0 15px 0; padding: 10px 12px; background: rgba(255,255,255,0.5); border-radius: 4px;">
+            <span style="color: #666;">Chargement des informations...</span>
+          </div>
           <div style="display: flex; gap: 10px; flex-wrap: wrap;">
             <a href="import-external.html" class="btn" style="background: #ffc107; color: #856404; font-weight: bold;">
               📤 Mettre à jour les inscriptions
@@ -687,7 +687,9 @@
 
     // Format import age with color coding
     function formatImportAge(importDate) {
-      if (!importDate) return { text: 'Jamais importé', color: '#dc3545', isOld: true };
+      if (!importDate) {
+        return { text: 'Jamais importé', color: '#dc3545', isOld: true };
+      }
 
       const lastDate = new Date(importDate);
       const now = new Date();
@@ -695,27 +697,30 @@
       const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
       const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
 
-      let text = '';
-      let color = '#28a745'; // green
+      let ageText = '';
+      let ageColor = '#28a745'; // green
+      let isOld = false;
 
       if (diffDays > 7) {
-        text = `il y a ${diffDays} jours`;
-        color = '#dc3545'; // red - very old
+        ageText = `il y a ${diffDays} jours`;
+        ageColor = '#dc3545'; // red - very old
+        isOld = true;
       } else if (diffDays > 2) {
-        text = `il y a ${diffDays} jours`;
-        color = '#fd7e14'; // orange - old
+        ageText = `il y a ${diffDays} jours`;
+        ageColor = '#fd7e14'; // orange - old
+        isOld = true;
       } else if (diffDays > 0) {
-        text = `il y a ${diffDays} jour${diffDays > 1 ? 's' : ''}`;
-        color = '#ffc107'; // yellow - recent
+        ageText = `il y a ${diffDays} jour${diffDays > 1 ? 's' : ''}`;
+        ageColor = '#ffc107'; // yellow - recent
       } else if (diffHours > 0) {
-        text = `il y a ${diffHours} heure${diffHours > 1 ? 's' : ''}`;
-        color = '#28a745'; // green - very recent
+        ageText = `il y a ${diffHours} heure${diffHours > 1 ? 's' : ''}`;
+        ageColor = '#28a745'; // green - very recent
       } else {
-        text = "à l'instant";
-        color = '#28a745'; // green
+        ageText = "à l'instant";
+        ageColor = '#28a745'; // green
       }
 
-      return { text, color, isOld: diffDays > 2 };
+      return { text: ageText, color: ageColor, isOld };
     }
 
     // Load and display last import dates for all file types
@@ -729,56 +734,35 @@
 
         if (response.ok) {
           const data = await response.json();
-          const imports = data.imports || [];
 
-          // Define file types we want to display
           const fileTypes = [
             { key: 'inscriptions', label: 'Inscriptions', icon: '📝' },
             { key: 'tournois', label: 'Tournois', icon: '🏆' },
             { key: 'joueurs', label: 'Joueurs', icon: '👥' }
           ];
 
-          // Build import info for each file type
-          const importInfoHtml = fileTypes.map(ft => {
-            const importData = imports.find(i => i.file_type === ft.key);
-            const age = formatImportAge(importData?.import_date);
+          let html = '<div style="display: grid; gap: 8px;">';
 
-            if (!importData) {
-              return `
-                <div style="display: flex; align-items: center; gap: 8px; padding: 6px 0;">
-                  <span>${ft.icon}</span>
-                  <strong style="min-width: 90px;">${ft.label}:</strong>
-                  <span style="color: #dc3545;">Jamais importé</span>
-                </div>
-              `;
-            }
+          fileTypes.forEach(ft => {
+            const info = data[ft.key];
+            const age = formatImportAge(info?.importDate);
 
-            const lastDate = new Date(importData.import_date);
-            const formattedDate = lastDate.toLocaleDateString('fr-FR', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            });
-
-            return `
-              <div style="display: flex; align-items: center; gap: 8px; padding: 6px 0;">
-                <span>${ft.icon}</span>
-                <strong style="min-width: 90px;">${ft.label}:</strong>
-                <span style="color: ${age.color};">${formattedDate}</span>
-                <span style="color: ${age.color}; font-size: 0.9em;">(${age.text})</span>
+            html += `
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="width: 24px;">${ft.icon}</span>
+                <span style="min-width: 100px; color: #856404; font-weight: 500;">${ft.label}:</span>
+                <span style="color: ${age.color}; font-weight: ${age.isOld ? 'bold' : 'normal'};">
+                  ${age.text}
+                  ${info?.recordCount ? `<span style="color: #666; font-weight: normal;"> (${info.recordCount} enregistrements)</span>` : ''}
+                </span>
               </div>
             `;
-          }).join('');
+          });
 
-          infoElement.innerHTML = `
-            <div style="display: flex; flex-direction: column; gap: 2px;">
-              ${importInfoHtml}
-            </div>
-          `;
+          html += '</div>';
+          infoElement.innerHTML = html;
         } else {
-          infoElement.innerHTML = `<span style="color: #666;">Impossible de charger les dates de mise à jour</span>`;
+          infoElement.innerHTML = `<span style="color: #666;">Impossible de charger les informations</span>`;
         }
       } catch (error) {
         console.error('Error loading last import date:', error);
@@ -961,6 +945,15 @@
 
     // Load upcoming tournaments
     async function loadUpcomingTournaments() {
+      const container = document.getElementById('upcomingTournamentsList');
+      const noTournamentsDiv = document.getElementById('noUpcomingTournaments');
+      const card = document.getElementById('upcomingTournamentsCard');
+
+      // Show loading state
+      container.innerHTML = '<p style="text-align: center; color: #666;">Chargement des tournois...</p>';
+      container.style.display = 'block';
+      noTournamentsDiv.style.display = 'none';
+
       try {
         const response = await fetch(`${API_URL}/inscriptions/tournoi/upcoming`, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -968,9 +961,6 @@
 
         if (response.ok) {
           const tournaments = await response.json();
-          const container = document.getElementById('upcomingTournamentsList');
-          const noTournamentsDiv = document.getElementById('noUpcomingTournaments');
-          const card = document.getElementById('upcomingTournamentsCard');
 
           if (tournaments.length === 0) {
             container.style.display = 'none';
@@ -1080,6 +1070,16 @@
       } else {
         alert(`Impossible de trouver la catégorie correspondante pour ${mode} - ${categorie}`);
       }
+    }
+
+    // Also load upcoming tournaments when coming from import-external page
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('skipWarning') === 'true') {
+      document.getElementById('inscriptionWarning').style.display = 'none';
+      document.getElementById('stepIndicatorContainer').style.display = 'flex';
+      document.getElementById('step1').style.display = 'block';
+      document.getElementById('upcomingTournamentsCard').style.display = 'block';
+      loadUpcomingTournaments();
     }
 
     // Load clubs for location selection
@@ -1280,15 +1280,11 @@
             headers: { 'Authorization': `Bearer ${token}` }
           });
 
+          // Fetch player emails for email convocations
+          fetchPlayerEmails(matchingTournoi.tournoi_id);
+
           if (inscriptionsResponse.ok) {
             const inscriptions = await inscriptionsResponse.json();
-
-            // Store emails for later use
-            inscriptions.forEach(i => {
-              if (i.licence && i.email) {
-                playerEmails[i.licence.replace(/\s/g, '')] = i.email;
-              }
-            });
 
             // Find new players (inscribed but not in ranking)
             const rankedLicences = new Set(rankedPlayers.map(p => p.licence.replace(/\s/g, '')));
@@ -1303,8 +1299,7 @@
                 club: i.club || '',
                 timestamp: i.timestamp,
                 isNew: true,
-                forfait: i.forfait,
-                email: i.email
+                forfait: i.forfait
               }));
 
             // Mark ranked players who are inscribed or forfait AND auto-select them
@@ -1833,7 +1828,18 @@
         });
 
         if (response.ok) {
-          // Store generation data for email functionality
+          // Download the file
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `Poules_${currentCategory.display_name}_T${currentTournament}_${currentSeason}.xlsx`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(url);
+
+          // Store data for email functionality
           const selectedDistance = document.getElementById('distanceSelect')?.value || 'normale';
           storeGenerationData({
             poules: poules,
@@ -1846,20 +1852,7 @@
             selectedDistance: selectedDistance
           });
 
-          // Download the file
-          const blob = await response.blob();
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `Poules_${currentCategory.display_name}_T${currentTournament}_${currentSeason}.xlsx`;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          window.URL.revokeObjectURL(url);
-
           goToStep(4);
-
-          // Update email stats after reaching step 4
           updateEmailStats();
         } else {
           const error = await response.json();
@@ -2151,6 +2144,21 @@
         progressBar.style.width = '30%';
         progressText.textContent = 'Envoi des convocations...';
 
+        // Check if we have test players (TEST*) and inject mock ranking data for testing
+        const hasTestPlayers = playersWithEmails.some(p => p.licence?.startsWith('TEST'));
+        let mockRankingData = null;
+        if (hasTestPlayers) {
+          mockRankingData = {
+            'TEST001': { rank: 1, moyenne: '2.098' },
+            'TEST002': { rank: 2, moyenne: '2.057' },
+            'TEST003': { rank: 3, moyenne: '2.697' },
+            'TEST004': { rank: 4, moyenne: '1.856' },
+            'TEST005': { rank: 5, moyenne: '1.542' },
+            'TEST006': { rank: 6, moyenne: '1.234' }
+          };
+          console.log('Test players detected, using mock ranking data');
+        }
+
         const response = await fetch(`${API_URL}/email/send-convocations`, {
           method: 'POST',
           headers: {
@@ -2159,7 +2167,7 @@
           },
           body: JSON.stringify({
             players: playersWithEmails,
-            poules: currentPoules.length > 0 ? currentPoules : lastGeneratedData.poules,
+            poules: lastGeneratedData.poules,
             category: currentCategory,
             season: currentSeason,
             tournament: currentTournament,
@@ -2167,60 +2175,50 @@
             locations: lastGeneratedData.locations,
             specialNote: document.getElementById('specialNoteField').value.trim(),
             gameParams: lastGeneratedData.gameParams,
-            selectedDistance: lastGeneratedData.selectedDistance
+            selectedDistance: lastGeneratedData.selectedDistance,
+            mockRankingData: mockRankingData
           })
         });
 
         progressBar.style.width = '100%';
 
+        const result = await response.json();
+
         if (response.ok) {
-          const data = await response.json();
-
-          // Show results
-          let resultsHtml = '<div style="text-align: left;">';
-
-          if (data.results.sent.length > 0) {
-            resultsHtml += `<div style="margin-bottom: 10px; padding: 10px; background: #d4edda; border-radius: 4px;">
-              <strong style="color: #155724;">✅ Envoyés (${data.results.sent.length}):</strong>
-              <ul style="margin: 5px 0 0 20px; padding: 0;">
-                ${data.results.sent.map(p => `<li>${p.name} - ${p.email}</li>`).join('')}
-              </ul>
-            </div>`;
-          }
-
-          if (data.results.failed.length > 0) {
-            resultsHtml += `<div style="margin-bottom: 10px; padding: 10px; background: #f8d7da; border-radius: 4px;">
-              <strong style="color: #721c24;">❌ Échecs (${data.results.failed.length}):</strong>
-              <ul style="margin: 5px 0 0 20px; padding: 0;">
-                ${data.results.failed.map(p => `<li>${p.name} - ${p.error}</li>`).join('')}
-              </ul>
-            </div>`;
-          }
-
-          if (data.results.skipped.length > 0) {
-            resultsHtml += `<div style="padding: 10px; background: #fff3cd; border-radius: 4px;">
-              <strong style="color: #856404;">⏭️ Ignorés (${data.results.skipped.length}):</strong>
-              <ul style="margin: 5px 0 0 20px; padding: 0;">
-                ${data.results.skipped.map(p => `<li>${p.name} - ${p.reason}</li>`).join('')}
-              </ul>
-            </div>`;
-          }
-
-          resultsHtml += '</div>';
-          results.innerHTML = resultsHtml;
-          results.style.display = 'block';
-
-          progressText.textContent = data.message;
+          progressText.textContent = `Emails envoyés: ${result.results.sent.length}, Échecs: ${result.results.failed.length}, Ignorés: ${result.results.skipped.length}`;
           progressText.style.color = '#28a745';
 
+          // Show results
+          results.style.display = 'block';
+          results.innerHTML = '';
+
+          if (result.results.sent.length > 0) {
+            results.innerHTML += `<div style="background: #d4edda; padding: 10px; border-radius: 4px; margin-bottom: 10px;">
+              <strong>✅ Envoyés (${result.results.sent.length}):</strong>
+              <ul style="margin: 5px 0 0 20px;">${result.results.sent.map(s => `<li>${s.name} - ${s.email}</li>`).join('')}</ul>
+            </div>`;
+          }
+
+          if (result.results.failed.length > 0) {
+            results.innerHTML += `<div style="background: #f8d7da; padding: 10px; border-radius: 4px; margin-bottom: 10px;">
+              <strong>❌ Échecs (${result.results.failed.length}):</strong>
+              <ul style="margin: 5px 0 0 20px;">${result.results.failed.map(f => `<li>${f.name} - ${f.error}</li>`).join('')}</ul>
+            </div>`;
+          }
+
+          if (result.results.skipped.length > 0) {
+            results.innerHTML += `<div style="background: #fff3cd; padding: 10px; border-radius: 4px;">
+              <strong>⚠️ Ignorés (${result.results.skipped.length}):</strong>
+              <ul style="margin: 5px 0 0 20px;">${result.results.skipped.map(s => `<li>${s.name} - ${s.reason}</li>`).join('')}</ul>
+            </div>`;
+          }
         } else {
-          const error = await response.json();
-          progressText.textContent = `Erreur: ${error.error}`;
+          progressText.textContent = `Erreur: ${result.error}`;
           progressText.style.color = '#dc3545';
         }
-
       } catch (error) {
         console.error('Error sending emails:', error);
+        progressBar.style.width = '100%';
         progressText.textContent = `Erreur: ${error.message}`;
         progressText.style.color = '#dc3545';
       }
@@ -2230,10 +2228,7 @@
       btn.textContent = '✉️ Envoyer les convocations';
     });
 
-    // Modify the existing loadPlayersBtn click handler to also fetch emails
-    const originalLoadPlayersHandler = document.getElementById('loadPlayersBtn').onclick;
-
-    // Override to also fetch emails from inscriptions
+    // Fetch player emails from inscriptions when loading
     async function fetchPlayerEmails(tournoiId) {
       try {
         const response = await fetch(`${API_URL}/inscriptions/tournoi/${tournoiId}/inscriptions`, {
@@ -2251,9 +2246,6 @@
         console.error('Error fetching player emails:', error);
       }
     }
-
-    // Modify generateExcelBtn to also store data for emails
-    const originalGenerateClick = document.getElementById('generateExcelBtn').onclick;
   </script>
 </body>
 </html>
