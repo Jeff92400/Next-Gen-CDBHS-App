@@ -1847,8 +1847,62 @@
       });
     });
 
+    // Get the rank field name for a game type
+    function getRankFieldForGameType(gameType) {
+      const mapping = {
+        'LIBRE': 'rank_libre',
+        '3BANDES': 'rank_3bandes',
+        '3 BANDES': 'rank_3bandes',
+        'BANDE': 'rank_bande',
+        '1BANDE': 'rank_bande',
+        '1 BANDE': 'rank_bande',
+        'CADRE': 'rank_cadre'
+      };
+      return mapping[gameType.toUpperCase()] || 'rank_libre';
+    }
+
+    // Check if player's rank matches the tournament category
+    function checkPlayerCategory(player, category) {
+      if (!category) return { matches: true };
+
+      const rankField = getRankFieldForGameType(category.game_type);
+      const playerRank = player[rankField] || 'NC';
+      const tournamentLevel = category.level.toUpperCase();
+
+      // NC (Non Classé) is considered not matching any specific level
+      if (playerRank === 'NC' || playerRank.toUpperCase() === 'NC') {
+        return {
+          matches: false,
+          playerRank: 'NC (Non Classé)',
+          expectedLevel: tournamentLevel,
+          gameType: category.game_type
+        };
+      }
+
+      // Check if ranks match
+      const matches = playerRank.toUpperCase() === tournamentLevel;
+      return {
+        matches,
+        playerRank: playerRank,
+        expectedLevel: tournamentLevel,
+        gameType: category.game_type
+      };
+    }
+
     addLastMinuteBtn.addEventListener('click', () => {
       if (!selectedLastMinutePlayer) return;
+
+      // Check if player's category matches the tournament
+      const categoryCheck = checkPlayerCategory(selectedLastMinutePlayer, currentCategory);
+
+      if (!categoryCheck.matches) {
+        const playerName = `${selectedLastMinutePlayer.first_name} ${selectedLastMinutePlayer.last_name}`;
+        const message = `⚠️ Attention: ${playerName} a le classement "${categoryCheck.playerRank}" en ${categoryCheck.gameType}, mais ce tournoi est pour la catégorie "${categoryCheck.expectedLevel}".\n\nVoulez-vous quand même l'ajouter ?`;
+
+        if (!confirm(message)) {
+          return; // User cancelled, don't add the player
+        }
+      }
 
       // Add to last minute players
       lastMinutePlayers.push({
