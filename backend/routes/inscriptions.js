@@ -425,9 +425,13 @@ router.get('/tournoi/upcoming', authenticateToken, (req, res) => {
   console.log(`Fetching upcoming tournaments from ${startDate} to ${endDate}`);
 
   const query = `
-    SELECT * FROM tournoi_ext
-    WHERE debut >= $1 AND debut <= $2
-    ORDER BY debut ASC, mode, categorie
+    SELECT t.*,
+           COALESCE(COUNT(CASE WHEN i.forfait != 1 OR i.forfait IS NULL THEN 1 END), 0) as inscrit_count
+    FROM tournoi_ext t
+    LEFT JOIN inscriptions i ON t.tournoi_id = i.tournoi_id
+    WHERE t.debut >= $1 AND t.debut <= $2
+    GROUP BY t.tournoi_id
+    ORDER BY t.debut ASC, t.mode, t.categorie
   `;
 
   db.all(query, [startDate, endDate], (err, rows) => {
@@ -436,13 +440,8 @@ router.get('/tournoi/upcoming', authenticateToken, (req, res) => {
       return res.status(500).json({ error: err.message });
     }
 
-    const results = (rows || []).map(row => ({
-      ...row,
-      inscrit_count: 0
-    }));
-
-    console.log(`Found ${results.length} upcoming tournaments`);
-    res.json(results);
+    console.log(`Found ${(rows || []).length} upcoming tournaments`);
+    res.json(rows || []);
   });
 });
 
