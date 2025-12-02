@@ -600,6 +600,19 @@
             </div>
           </div>
 
+          <!-- Special note field -->
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; font-weight: bold; color: #333; margin-bottom: 8px;">
+              Note particulière à inscrire sur l'email d'envoi :
+            </label>
+            <textarea id="specialNoteField"
+                      placeholder="Exemple: Attention, le tournoi débutera exceptionnellement à 13H00 ce samedi..."
+                      style="width: 100%; min-height: 80px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-family: inherit; font-size: 14px; resize: vertical;"></textarea>
+            <p style="margin: 5px 0 0 0; font-size: 12px; color: #666;">
+              Cette note apparaîtra en évidence en haut de l'email, avant le message de convocation.
+            </p>
+          </div>
+
           <button class="btn" id="sendConvocationsBtn" style="background: #17a2b8;">
             ✉️ Envoyer les convocations
           </button>
@@ -2069,7 +2082,8 @@
             season: currentSeason,
             tournament: currentTournament,
             tournamentDate: matchingTournoi?.debut || null,
-            locations: lastGeneratedData.locations
+            locations: lastGeneratedData.locations,
+            specialNote: document.getElementById('specialNoteField').value.trim()
           })
         });
 
