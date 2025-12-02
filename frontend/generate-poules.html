@@ -612,8 +612,8 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
               <label style="font-weight: bold; color: #333;">Sélectionner les joueurs à convoquer :</label>
               <div>
-                <button type="button" id="selectAllBtn" class="btn" style="background: #28a745; padding: 5px 10px; font-size: 12px; margin-right: 5px;">Tout cocher</button>
-                <button type="button" id="deselectAllBtn" class="btn" style="background: #dc3545; padding: 5px 10px; font-size: 12px;">Tout décocher</button>
+                <button type="button" id="emailSelectAllBtn" class="btn" style="background: #28a745; padding: 5px 10px; font-size: 12px; margin-right: 5px;">Tout cocher</button>
+                <button type="button" id="emailDeselectAllBtn" class="btn" style="background: #dc3545; padding: 5px 10px; font-size: 12px;">Tout décocher</button>
               </div>
             </div>
             <div id="playerCheckboxList" style="max-height: 300px; overflow-y: auto; background: white; border: 1px solid #ddd; border-radius: 4px; padding: 10px;">
@@ -2079,13 +2079,13 @@
       document.getElementById('sendConvocationsBtn').disabled = checkboxes.length === 0;
     }
 
-    // Select all / Deselect all buttons
-    document.getElementById('selectAllBtn').addEventListener('click', () => {
+    // Select all / Deselect all buttons for email section
+    document.getElementById('emailSelectAllBtn').addEventListener('click', () => {
       document.querySelectorAll('#playerCheckboxList input[type="checkbox"]:not(:disabled)').forEach(cb => cb.checked = true);
       updateCheckedCount();
     });
 
-    document.getElementById('deselectAllBtn').addEventListener('click', () => {
+    document.getElementById('emailDeselectAllBtn').addEventListener('click', () => {
       document.querySelectorAll('#playerCheckboxList input[type="checkbox"]').forEach(cb => cb.checked = false);
       updateCheckedCount();
     });
