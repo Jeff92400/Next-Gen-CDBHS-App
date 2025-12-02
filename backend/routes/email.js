@@ -295,7 +295,7 @@ router.post('/send-convocations', authenticateToken, async (req, res) => {
 
               <p>En cas d'empechement, merci d'informer des que possible l'equipe en charge du sportif a l'adresse ci-dessous.</p>
 
-              <p>Vous aurez note un changement notable quant au processus d'invitation et sommes a votre ecoute si vous avez des remarques ou des suggestions.</p>
+              <p>Vous aurez noté un changement notable quant au processus d'invitation et sommes a votre ecoute si vous avez des remarques ou des suggestions.</p>
 
               <p>Nous vous souhaitons une excellente competition.</p>
 
