@@ -356,6 +356,17 @@ tbody tr:nth-child(even) {
   color: white;
 }
 
+/* Qualified for final - green highlight */
+.qualified-for-final {
+  background: #e8f5e9 !important;
+  border-left: 4px solid #4caf50;
+}
+
+.qualified-for-final td:first-child {
+  font-weight: bold;
+  color: #2e7d32;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

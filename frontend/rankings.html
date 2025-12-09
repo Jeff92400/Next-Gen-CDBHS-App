@@ -13,7 +13,8 @@
       <h2><img src="images/billiard-icon.png" alt="🎱" style="height: 28px; width: 28px; vertical-align: middle; margin-right: 8px;" onerror="this.style.display='none'; this.nextSibling.style.display='inline';"><span style="display:none;">🎱</span> Classements</h2>
       <div class="nav-links">
         <a href="tournaments-list.html">Tournois joués</a>
-        <a href="generate-poules.html">Tournois à jouer</a>
+        <a href="generate-poules.html">Compétitions à jouer</a>
+        <a href="emailing.html">Emailing</a>
         <a href="dashboard.html">Accueil</a>
         <a href="#" id="logoutBtn" class="nav-logout">Déconnexion</a>
       </div>
@@ -38,9 +39,12 @@
           </select>
         </div>
 
-        <div class="form-group" style="display: flex; align-items: flex-end;">
+        <div class="form-group" style="display: flex; align-items: flex-end; gap: 10px;">
           <button class="btn btn-success" id="exportBtn" style="margin-top: 0;">
             📊 Exporter en Excel
+          </button>
+          <button class="btn admin-only" id="recalculateBtn" style="margin-top: 0; background: #ff9800; color: white;">
+            🔄 Recalculer
           </button>
         </div>
       </div>
@@ -53,6 +57,11 @@
 
     <div class="card" id="rankingsCard" style="display: none;">
       <h3 id="rankingsTitle">Classement</h3>
+      <p id="qualifiedLegend" style="display: none; font-size: 13px; color: #2e7d32; margin-top: -10px; margin-bottom: 10px;">
+        <span style="display: inline-block; width: 12px; height: 12px; background: #e8f5e9; border-left: 3px solid #4caf50; margin-right: 6px; vertical-align: middle;"></span>
+        <span id="qualifiedText">Qualifiés pour la finale</span>
+      </p>
+      <p id="rankingsLegend" style="display: none; font-size: 12px; color: #666; font-style: italic; margin-top: 0; margin-bottom: 15px;">(*) Non-participation au tournoi concerné</p>
       <div class="table-container">
         <table>
           <thead>
@@ -295,29 +304,60 @@
           throw new Error(errorData.error || 'Failed to load rankings');
         }
 
-        const rankings = await response.json();
-        console.log('Rankings loaded:', rankings.length);
+        const data = await response.json();
+        const rankings = data.rankings || [];
+        const tournamentsPlayed = data.tournamentsPlayed || { t1: false, t2: false, t3: false };
+        console.log('Rankings loaded:', rankings.length, 'Tournaments played:', tournamentsPlayed);
 
-        if (rankings.length === 0) {
+        if (!rankings || rankings.length === 0) {
           document.getElementById('loadingRankings').style.display = 'none';
           document.getElementById('noDataMessage').style.display = 'block';
           return;
         }
 
+        // Determine which tournament we're after
+        let tournamentSuffix = '';
+        if (tournamentsPlayed.t3) {
+          tournamentSuffix = ' - après 3ème tournoi';
+        } else if (tournamentsPlayed.t2) {
+          tournamentSuffix = ' - après 2ème tournoi';
+        } else if (tournamentsPlayed.t1) {
+          tournamentSuffix = ' - après 1er tournoi';
+        }
+
         // Update title
-        document.getElementById('rankingsTitle').textContent = `Classement ${rankings[0].display_name} - ${currentSeason}`;
+        document.getElementById('rankingsTitle').textContent = `Classement ${rankings[0].display_name} - ${currentSeason}${tournamentSuffix}`;
 
         // Populate table
         const tbody = document.getElementById('rankingsBody');
         tbody.innerHTML = '';
 
+        // Helper to format tournament points:
+        // - Tournament not played → "-"
+        // - Tournament played but player absent (null) → "*"
+        // - Tournament played and player participated → show points
+        const formatTournamentPoints = (points, tournamentPlayed) => {
+          if (!tournamentPlayed) {
+            return '<span style="color: #ccc;">-</span>';
+          }
+          if (points === null || points === undefined) {
+            return '<span style="color: #999; font-size: 18px; font-weight: bold;">*</span>';
+          }
+          return points;
+        };
+
+        // Calculate number of qualified players for the final
+        // Rule: < 9 players → 4 qualified, >= 9 players → 6 qualified
+        const totalPlayers = rankings.length;
+        const qualifiedCount = totalPlayers < 9 ? 4 : 6;
+
         rankings.forEach(rank => {
           const row = document.createElement('tr');
 
-          // Add special class for top 3
-          if (rank.rank_position === 1) row.classList.add('rank-1');
-          if (rank.rank_position === 2) row.classList.add('rank-2');
-          if (rank.rank_position === 3) row.classList.add('rank-3');
+          // Add qualified class for players on track to be selected for the final
+          if (rank.rank_position <= qualifiedCount) {
+            row.classList.add('qualified-for-final');
+          }
 
           const moyenne = rank.cumulated_reprises > 0
             ? (rank.cumulated_points / rank.cumulated_reprises).toFixed(3)
@@ -332,9 +372,9 @@
                 </a>
               </td>
               <td></td>
-              <td style="text-align: center;">${rank.tournament_1_points}</td>
-              <td style="text-align: center;">${rank.tournament_2_points}</td>
-              <td style="text-align: center;">${rank.tournament_3_points}</td>
+              <td style="text-align: center;">${formatTournamentPoints(rank.tournament_1_points, tournamentsPlayed.t1)}</td>
+              <td style="text-align: center;">${formatTournamentPoints(rank.tournament_2_points, tournamentsPlayed.t2)}</td>
+              <td style="text-align: center;">${formatTournamentPoints(rank.tournament_3_points, tournamentsPlayed.t3)}</td>
               <td style="text-align: center; font-weight: bold;">${rank.total_match_points}</td>
               <td style="text-align: center;">${rank.cumulated_points}</td>
               <td style="text-align: center;">${rank.cumulated_reprises}</td>
@@ -348,6 +388,19 @@
 
             tbody.appendChild(row);
           });
+
+        // Show qualified legend with count
+        document.getElementById('qualifiedText').textContent =
+          `${qualifiedCount} premiers qualifiés pour la finale (${totalPlayers} joueur${totalPlayers > 1 ? 's' : ''} classé${totalPlayers > 1 ? 's' : ''})`;
+        document.getElementById('qualifiedLegend').style.display = 'block';
+
+        // Show absent legend only if there are absent players from PLAYED tournaments
+        const hasAbsentPlayers = rankings.some(r =>
+          (tournamentsPlayed.t1 && r.tournament_1_points === null) ||
+          (tournamentsPlayed.t2 && r.tournament_2_points === null) ||
+          (tournamentsPlayed.t3 && r.tournament_3_points === null)
+        );
+        document.getElementById('rankingsLegend').style.display = hasAbsentPlayers ? 'block' : 'none';
 
         document.getElementById('loadingRankings').style.display = 'none';
         document.getElementById('rankingsCard').style.display = 'block';
@@ -410,6 +463,54 @@
       } catch (error) {
         console.error('Export error:', error);
         alert('Erreur lors de l\'export');
+      }
+    });
+
+    // Recalculate rankings
+    document.getElementById('recalculateBtn').addEventListener('click', async () => {
+      if (!currentCategoryId || !currentSeason) {
+        alert('Veuillez sélectionner une saison et une catégorie');
+        return;
+      }
+
+      if (!confirm('Recalculer le classement pour cette catégorie et saison ?')) {
+        return;
+      }
+
+      const btn = document.getElementById('recalculateBtn');
+      const originalText = btn.innerHTML;
+      btn.innerHTML = '⏳ Recalcul...';
+      btn.disabled = true;
+
+      try {
+        const response = await fetch(`${API_URL}/tournaments/recalculate-rankings`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            categoryId: parseInt(currentCategoryId),
+            season: currentSeason
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Erreur lors du recalcul');
+        }
+
+        const result = await response.json();
+        alert(`Classement recalculé avec succès !\n${result.playersRanked} joueurs classés.`);
+
+        // Reload rankings to show updated data
+        await loadRankings();
+      } catch (error) {
+        console.error('Recalculate error:', error);
+        alert(`Erreur: ${error.message}`);
+      } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
       }
     });
 
