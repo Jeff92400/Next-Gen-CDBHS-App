@@ -249,9 +249,10 @@
 <body>
   <div class="container">
     <div class="navbar">
-      <h2><img src="images/billiard-icon.png" alt="🎱" style="height: 28px; width: 28px; vertical-align: middle; margin-right: 8px;" onerror="this.style.display='none'; this.nextSibling.style.display='inline';"><span style="display:none;">🎱</span> Tournois à Jouer</h2>
+      <h2><img src="images/billiard-icon.png" alt="🎱" style="height: 28px; width: 28px; vertical-align: middle; margin-right: 8px;" onerror="this.style.display='none'; this.nextSibling.style.display='inline';"><span style="display:none;">🎱</span> Compétitions à jouer</h2>
       <div class="nav-links">
         <a href="rankings.html">Classements</a>
+        <a href="emailing.html">Emailing</a>
         <a href="dashboard.html">Accueil</a>
         <a href="#" id="logoutBtn" class="nav-logout">Déconnexion</a>
       </div>
@@ -507,8 +508,8 @@
               <option value="12:00">12:00</option>
               <option value="12:30">12:30</option>
               <option value="13:00">13:00</option>
-              <option value="13:30">13:30</option>
-              <option value="14:00" selected>14:00</option>
+              <option value="13:30" selected>13:30</option>
+              <option value="14:00">14:00</option>
               <option value="14:30">14:30</option>
               <option value="15:00">15:00</option>
               <option value="15:30">15:30</option>
@@ -604,6 +605,7 @@
             </div>
             <div id="selectedCount" style="margin-top: 10px; font-size: 14px; color: #666;">
               <strong><span id="checkedCount">0</span></strong> joueur(s) sélectionné(s) pour l'envoi
+              <br><span style="color: #17a2b8;">📋 Récapitulatif envoyé à : <strong id="summaryEmailDisplay">cdbhs92@gmail.com</strong></span>
             </div>
           </div>
 
@@ -656,6 +658,22 @@
     } else {
       document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
     }
+
+    // Load summary email setting for display
+    (async function loadSummaryEmailDisplay() {
+      try {
+        const response = await fetch(`${API_URL}/settings/app/summary_email`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const email = data.value || 'cdbhs92@gmail.com';
+          document.getElementById('summaryEmailDisplay').textContent = email;
+        }
+      } catch (error) {
+        console.error('Error loading summary email:', error);
+      }
+    })();
 
     // Logout
     document.getElementById('logoutBtn').addEventListener('click', (e) => {
@@ -1780,8 +1798,8 @@
         address: loc2Option.dataset.address
       } : null;
 
-      const startTime1 = document.getElementById('startTime1').value || '14:00';
-      const startTime2 = document.getElementById('startTime2').value || '14:00';
+      const startTime1 = document.getElementById('startTime1').value || '13:30';
+      const startTime2 = document.getElementById('startTime2').value || '13:30';
 
       // Get poule location assignments
       const pouleAssignments = {};
@@ -1883,8 +1901,8 @@
         zip_code: loc2Option.dataset.zipcode
       } : null;
 
-      const startTime1 = document.getElementById('startTime1').value || '14:00';
-      const startTime2 = document.getElementById('startTime2').value || '14:00';
+      const startTime1 = document.getElementById('startTime1').value || '13:30';
+      const startTime2 = document.getElementById('startTime2').value || '13:30';
 
       // Get poule location assignments
       const pouleAssignments = {};
