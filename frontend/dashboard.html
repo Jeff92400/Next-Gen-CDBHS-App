@@ -164,7 +164,7 @@
           Accueil
         </a>
 
-        <div class="nav-dropdown">
+        <div class="nav-dropdown admin-only">
           <button class="nav-link">
             <span class="nav-link-icon">📁</span>
             Fichiers
@@ -208,7 +208,7 @@
           Tournois à jouer
         </a>
 
-        <div class="nav-dropdown">
+        <div class="nav-dropdown admin-only">
           <button class="nav-link">
             <span class="nav-link-icon">⚙️</span>
             Paramètres
@@ -255,21 +255,15 @@
         </div>
         <div class="stats-bar-divider"></div>
         <div class="stats-bar-item">
-          <span class="stats-bar-icon">🎱</span>
-          <span class="stats-bar-value" id="totalPlayerCount">-</span>
-          <span class="stats-bar-label">Total joueurs</span>
-        </div>
-        <div class="stats-bar-divider"></div>
-        <div class="stats-bar-item">
           <span class="stats-bar-icon">🏆</span>
           <span class="stats-bar-value" id="tournamentCount">-</span>
-          <span class="stats-bar-label">Compétitions</span>
+          <span class="stats-bar-label">Compétitions jouées</span>
         </div>
         <div class="stats-bar-divider"></div>
         <div class="stats-bar-item">
-          <span class="stats-bar-icon">📊</span>
-          <span class="stats-bar-value">13</span>
-          <span class="stats-bar-label">Catégories</span>
+          <span class="stats-bar-icon">🎯</span>
+          <span class="stats-bar-value" id="cumulativeParticipants">-</span>
+          <span class="stats-bar-label">Participants cumulés</span>
         </div>
       </div>
 
@@ -279,62 +273,29 @@
           <h3 class="card-title">Actions Rapides</h3>
         </div>
         <div class="quick-actions">
-          <a href="players-list.html" class="quick-action-card">
-            <div class="quick-action-icon">👥</div>
-            <span class="quick-action-label">Liste des Joueurs</span>
-          </a>
           <a href="import-tournament.html" class="quick-action-card admin-only">
             <div class="quick-action-icon">📤</div>
             <span class="quick-action-label">Importer un Tournoi</span>
+          </a>
+          <a href="generate-poules.html" class="quick-action-card">
+            <div class="quick-action-icon">🎯</div>
+            <span class="quick-action-label">Tournois à jouer</span>
           </a>
           <a href="rankings.html" class="quick-action-card">
             <div class="quick-action-icon">📊</div>
             <span class="quick-action-label">Voir les Classements</span>
           </a>
-          <a href="generate-poules.html" class="quick-action-card">
-            <div class="quick-action-icon">🎯</div>
-            <span class="quick-action-label">Générer les Poules</span>
+          <a href="calendar.html" class="quick-action-card">
+            <div class="quick-action-icon">📅</div>
+            <span class="quick-action-label">Calendrier</span>
+          </a>
+          <a href="players-list.html" class="quick-action-card">
+            <div class="quick-action-icon">👥</div>
+            <span class="quick-action-label">Joueurs</span>
           </a>
         </div>
       </div>
 
-      <!-- Recent Tournaments -->
-      <div class="card tournaments-section">
-        <div class="card-header">
-          <h3 class="card-title">Derniers Tournois Importés</h3>
-          <a href="tournaments-list.html" class="btn btn-ghost btn-sm">Voir tout →</a>
-        </div>
-
-        <div id="loadingTournaments" class="loading">
-          <div class="spinner"></div>
-          <p>Chargement des tournois...</p>
-        </div>
-
-        <div id="tournamentsTable" style="display: none;">
-          <div class="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Catégorie</th>
-                  <th>Tournoi</th>
-                  <th>Saison</th>
-                  <th>Participants</th>
-                  <th>Date</th>
-                  <th style="text-align: right;">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="tournamentsBody"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div id="emptyTournaments" class="empty-state" style="display: none;">
-          <div class="empty-state-icon">🏆</div>
-          <h4 class="empty-state-title">Aucun tournoi importé</h4>
-          <p class="empty-state-text">Commencez par importer un tournoi pour voir les résultats ici.</p>
-          <a href="import-tournament.html" class="btn admin-only">Importer un tournoi</a>
-        </div>
-      </div>
     </main>
   </div>
 
@@ -408,7 +369,6 @@
           const allPlayers = await allPlayersResponse.json();
           const activePlayers = allPlayers.filter(p => p.is_active === 1);
           document.getElementById('activePlayerCount').textContent = activePlayers.length;
-          document.getElementById('totalPlayerCount').textContent = allPlayers.length;
         }
 
         // Load tournaments
@@ -426,106 +386,12 @@
           const tournaments = await tournamentsResponse.json();
           document.getElementById('tournamentCount').textContent = tournaments.length;
 
-          // Sort by date (newest first)
-          tournaments.sort((a, b) => {
-            const dateA = new Date(a.tournament_date || a.import_date);
-            const dateB = new Date(b.tournament_date || b.import_date);
-            return dateB - dateA;
-          });
-
-          const recentTournaments = tournaments.slice(0, 5);
-          const tbody = document.getElementById('tournamentsBody');
-          tbody.innerHTML = '';
-
-          document.getElementById('loadingTournaments').style.display = 'none';
-
-          if (recentTournaments.length === 0) {
-            document.getElementById('emptyTournaments').style.display = 'flex';
-          } else {
-            document.getElementById('tournamentsTable').style.display = 'block';
-
-            recentTournaments.forEach(tournament => {
-              const row = document.createElement('tr');
-              row.className = 'table-row-clickable';
-              const tournamentLabel = tournament.tournament_number === 4 ? 'Finale' : `T${tournament.tournament_number}`;
-
-              const deleteBtn = userRole === 'admin'
-                ? `<button class="btn-delete-small" data-tournament-id="${tournament.id}" title="Supprimer">🗑️</button>`
-                : '';
-
-              row.innerHTML = `
-                <td><span class="badge badge-primary">${tournament.display_name}</span></td>
-                <td><strong>${tournamentLabel}</strong></td>
-                <td>${tournament.season}</td>
-                <td>${tournament.player_count} joueurs</td>
-                <td>${tournament.tournament_date ? new Date(tournament.tournament_date).toLocaleDateString('fr-FR') : '-'}</td>
-                <td>
-                  <div class="table-actions">
-                    <button class="btn-view" data-tournament-id="${tournament.id}">Voir</button>
-                    ${deleteBtn}
-                  </div>
-                </td>
-              `;
-
-              // Row click (except actions column)
-              row.addEventListener('click', (e) => {
-                if (!e.target.closest('.table-actions')) {
-                  window.location.href = `rankings.html?categoryId=${tournament.category_id}&season=${encodeURIComponent(tournament.season)}`;
-                }
-              });
-
-              // View button
-              row.querySelector('.btn-view').addEventListener('click', (e) => {
-                e.stopPropagation();
-                window.location.href = `tournament-results.html?id=${tournament.id}`;
-              });
-
-              // Delete button
-              const deleteBtnEl = row.querySelector('.btn-delete-small');
-              if (deleteBtnEl) {
-                deleteBtnEl.addEventListener('click', async (e) => {
-                  e.stopPropagation();
-                  if (confirm(`Supprimer "${tournament.display_name} - T${tournament.tournament_number}" ?\n\nCette action recalculera les classements.`)) {
-                    await deleteTournament(tournament.id);
-                  }
-                });
-              }
-
-              tbody.appendChild(row);
-            });
-          }
+          // Calculate cumulative participants (sum of all player_count from tournaments)
+          const cumulativeParticipants = tournaments.reduce((sum, t) => sum + (parseInt(t.player_count, 10) || 0), 0);
+          document.getElementById('cumulativeParticipants').textContent = cumulativeParticipants;
         }
       } catch (error) {
         console.error('Error loading dashboard:', error);
-        document.getElementById('loadingTournaments').innerHTML = '<p class="text-danger">Erreur de chargement</p>';
-      }
-    }
-
-    // Delete tournament
-    async function deleteTournament(tournamentId) {
-      try {
-        const response = await fetch(`${API_URL}/tournaments/${tournamentId}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (response.ok) {
-          const successDiv = document.getElementById('successMessage');
-          const successText = document.getElementById('successText');
-          successText.textContent = 'Tournoi supprimé avec succès !';
-          successDiv.style.display = 'flex';
-          setTimeout(() => successDiv.style.display = 'none', 3000);
-          loadDashboard();
-        } else {
-          const data = await response.json();
-          alert(`Erreur: ${data.error || 'Erreur inconnue'}`);
-        }
-      } catch (error) {
-        console.error('Error deleting tournament:', error);
-        alert('Erreur de connexion');
       }
     }
 
