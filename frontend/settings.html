@@ -243,6 +243,53 @@
 
       <div id="emailTemplateMessage" style="display: none; margin-top: 15px; padding: 10px; border-radius: 4px;"></div>
     </div>
+
+    <!-- Club Aliases Section - Admin Only -->
+    <div class="card admin-only" id="clubAliasesSection">
+      <h3>Alias des Clubs</h3>
+      <p style="margin-bottom: 20px; color: #666;">
+        Gérez les correspondances entre les différentes variantes de noms de clubs.
+        Cela permet d'afficher le bon logo même si le nom du club varie selon les sources.
+      </p>
+
+      <!-- Add New Alias Form -->
+      <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+        <h4 style="margin: 0 0 15px 0; color: #1F4788;">Ajouter un alias</h4>
+        <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
+          <div style="flex: 1; min-width: 200px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Variante (alias) :</label>
+            <input type="text" id="newAliasName" placeholder="Ex: A DE BILLARD COURBEVOIE LA DEFENSE" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+          </div>
+          <div style="flex: 1; min-width: 200px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Nom canonique (officiel) :</label>
+            <select id="newAliasCanonical" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+              <option value="">-- Sélectionner un club --</option>
+            </select>
+          </div>
+          <button onclick="addClubAlias()" class="btn" style="background: #28a745; padding: 10px 20px;">
+            + Ajouter
+          </button>
+        </div>
+      </div>
+
+      <!-- Existing Aliases Table -->
+      <div id="aliasesTableContainer" style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+          <thead>
+            <tr style="background: #1F4788; color: white;">
+              <th style="padding: 12px; text-align: left;">Variante (alias)</th>
+              <th style="padding: 12px; text-align: left;">Nom Canonique</th>
+              <th style="padding: 12px; text-align: center; width: 100px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="aliasesTableBody">
+            <tr><td colspan="3" style="text-align: center; padding: 20px; color: #666;">Chargement...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="aliasesMessage" style="display: none; margin-top: 15px; padding: 10px; border-radius: 4px;"></div>
+    </div>
   </div>
 
   <script>
@@ -1136,6 +1183,147 @@ Comite Departemental Billard Hauts-de-Seine`
     loadEmailTemplate();
 
     // ============= END EMAIL TEMPLATE MANAGEMENT =============
+
+    // ============= CLUB ALIASES MANAGEMENT =============
+
+    let clubsList = [];
+
+    // Load clubs for alias dropdown
+    async function loadClubsForAliases() {
+      try {
+        const response = await fetch(`${API_URL}/clubs`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          clubsList = await response.json();
+          const select = document.getElementById('newAliasCanonical');
+          select.innerHTML = '<option value="">-- Sélectionner un club --</option>';
+          clubsList.forEach(club => {
+            const option = document.createElement('option');
+            option.value = club.name;
+            option.textContent = club.display_name || club.name;
+            select.appendChild(option);
+          });
+        }
+      } catch (error) {
+        console.error('Error loading clubs:', error);
+      }
+    }
+
+    // Load existing aliases
+    async function loadClubAliases() {
+      try {
+        const response = await fetch(`${API_URL}/clubs/aliases/list`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        const tbody = document.getElementById('aliasesTableBody');
+
+        if (response.ok) {
+          const aliases = await response.json();
+
+          if (aliases.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 20px; color: #666;">Aucun alias configuré</td></tr>';
+            return;
+          }
+
+          tbody.innerHTML = aliases.map(alias => `
+            <tr style="border-bottom: 1px solid #ddd;">
+              <td style="padding: 12px;">${alias.alias}</td>
+              <td style="padding: 12px;">${alias.canonical_name}</td>
+              <td style="padding: 12px; text-align: center;">
+                <button onclick="deleteClubAlias(${alias.id}, '${alias.alias.replace(/'/g, "\\'")}')"
+                        class="btn" style="background: #dc3545; padding: 5px 10px; font-size: 12px;">
+                  Supprimer
+                </button>
+              </td>
+            </tr>
+          `).join('');
+        } else {
+          tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 20px; color: #dc3545;">Erreur de chargement</td></tr>';
+        }
+      } catch (error) {
+        console.error('Error loading aliases:', error);
+        document.getElementById('aliasesTableBody').innerHTML =
+          '<tr><td colspan="3" style="text-align: center; padding: 20px; color: #dc3545;">Erreur de chargement</td></tr>';
+      }
+    }
+
+    // Add new alias
+    async function addClubAlias() {
+      const alias = document.getElementById('newAliasName').value.trim();
+      const canonicalName = document.getElementById('newAliasCanonical').value;
+
+      if (!alias || !canonicalName) {
+        showAliasMessage('Veuillez remplir tous les champs', 'error');
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_URL}/clubs/aliases`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ alias, canonical_name: canonicalName })
+        });
+
+        if (response.ok) {
+          document.getElementById('newAliasName').value = '';
+          document.getElementById('newAliasCanonical').value = '';
+          showAliasMessage('Alias ajouté avec succès !', 'success');
+          loadClubAliases();
+        } else {
+          const data = await response.json();
+          showAliasMessage(data.error || 'Erreur lors de l\'ajout', 'error');
+        }
+      } catch (error) {
+        console.error('Error adding alias:', error);
+        showAliasMessage('Erreur de connexion', 'error');
+      }
+    }
+
+    // Delete alias
+    async function deleteClubAlias(id, aliasName) {
+      if (!confirm(`Supprimer l'alias "${aliasName}" ?`)) return;
+
+      try {
+        const response = await fetch(`${API_URL}/clubs/aliases/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+          showAliasMessage('Alias supprimé', 'success');
+          loadClubAliases();
+        } else {
+          showAliasMessage('Erreur lors de la suppression', 'error');
+        }
+      } catch (error) {
+        console.error('Error deleting alias:', error);
+        showAliasMessage('Erreur de connexion', 'error');
+      }
+    }
+
+    // Show message for aliases section
+    function showAliasMessage(message, type) {
+      const msgDiv = document.getElementById('aliasesMessage');
+      msgDiv.textContent = message;
+      msgDiv.style.display = 'block';
+      msgDiv.style.background = type === 'success' ? '#d4edda' : '#f8d7da';
+      msgDiv.style.color = type === 'success' ? '#155724' : '#721c24';
+
+      setTimeout(() => {
+        msgDiv.style.display = 'none';
+      }, 3000);
+    }
+
+    // Load aliases on page load
+    loadClubsForAliases();
+    loadClubAliases();
+
+    // ============= END CLUB ALIASES MANAGEMENT =============
   </script>
 
   <!-- Edit Game Parameter Modal -->
