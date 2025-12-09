@@ -7,6 +7,24 @@ const { authenticateToken } = require('./auth');
 
 const router = express.Router();
 
+// Debug: check players table
+router.get('/debug-player/:licence', authenticateToken, (req, res) => {
+  const { licence } = req.params;
+  db.all(`SELECT licence, first_name, last_name, LENGTH(licence) as len FROM players WHERE licence LIKE ?`, [`%${licence}%`], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+// Debug: check rankings table directly
+router.get('/debug-rankings-table/:categoryId/:season', authenticateToken, (req, res) => {
+  const { categoryId, season } = req.params;
+  db.all(`SELECT licence, total_match_points, rank_position FROM rankings WHERE category_id = ? AND season = ? ORDER BY rank_position`, [categoryId, season], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ count: rows.length, rows });
+  });
+});
+
 // Get rankings by category and season
 router.get('/', authenticateToken, (req, res) => {
   const { categoryId, season } = req.query;
@@ -15,48 +33,77 @@ router.get('/', authenticateToken, (req, res) => {
     return res.status(400).json({ error: 'Category ID and season required' });
   }
 
-  const query = `
-    SELECT
-      r.rank_position,
-      r.licence,
-      p.first_name,
-      p.last_name,
-      p.club,
-      r.total_match_points,
-      r.avg_moyenne,
-      r.best_serie,
-      r.tournament_1_points,
-      r.tournament_2_points,
-      r.tournament_3_points,
-      c.game_type,
-      c.level,
-      c.display_name,
-      clubs.logo_filename as club_logo,
-      COALESCE((SELECT SUM(tr.points) FROM tournament_results tr
-                JOIN tournaments t ON tr.tournament_id = t.id
-                WHERE REPLACE(tr.licence, ' ', '') = REPLACE(r.licence, ' ', '')
-                AND t.category_id = r.category_id
-                AND t.season = r.season
-                AND t.tournament_number <= 3), 0) as cumulated_points,
-      COALESCE((SELECT SUM(tr.reprises) FROM tournament_results tr
-                JOIN tournaments t ON tr.tournament_id = t.id
-                WHERE REPLACE(tr.licence, ' ', '') = REPLACE(r.licence, ' ', '')
-                AND t.category_id = r.category_id
-                AND t.season = r.season
-                AND t.tournament_number <= 3), 0) as cumulated_reprises
-    FROM rankings r
-    JOIN players p ON REPLACE(r.licence, ' ', '') = REPLACE(p.licence, ' ', '')
-    JOIN categories c ON r.category_id = c.id
-    LEFT JOIN clubs ON REPLACE(REPLACE(REPLACE(UPPER(p.club), ' ', ''), '.', ''), '-', '') = REPLACE(REPLACE(REPLACE(UPPER(clubs.name), ' ', ''), '.', ''), '-', '')
-    WHERE r.category_id = ? AND r.season = ?
-    ORDER BY r.rank_position
+  // First, check which tournaments have been played for this category/season
+  const tournamentsPlayedQuery = `
+    SELECT tournament_number FROM tournaments
+    WHERE category_id = ? AND season = ? AND tournament_number <= 3
   `;
 
-  db.all(query, [categoryId, season], (err, rows) => {
+  db.all(tournamentsPlayedQuery, [categoryId, season], (err, tournamentRows) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
-    res.json(rows);
+
+    const tournamentsPlayed = {
+      t1: tournamentRows.some(t => t.tournament_number === 1),
+      t2: tournamentRows.some(t => t.tournament_number === 2),
+      t3: tournamentRows.some(t => t.tournament_number === 3)
+    };
+
+    // Use LEFT JOIN for players to include ranked players even if not in players table
+    // Get player name from tournament_results as fallback
+    // Use club_aliases to resolve variant club names to canonical names
+    const query = `
+      SELECT
+        r.rank_position,
+        r.licence,
+        COALESCE(p.first_name, (SELECT MAX(tr.player_name) FROM tournament_results tr WHERE REPLACE(tr.licence, ' ', '') = r.licence)) as first_name,
+        COALESCE(p.last_name, '') as last_name,
+        COALESCE(ca.canonical_name, p.club, 'Non renseigné') as club,
+        r.total_match_points,
+        r.avg_moyenne,
+        r.best_serie,
+        r.tournament_1_points,
+        r.tournament_2_points,
+        r.tournament_3_points,
+        c.game_type,
+        c.level,
+        c.display_name,
+        clubs.logo_filename as club_logo,
+        COALESCE((SELECT SUM(tr.points) FROM tournament_results tr
+                  JOIN tournaments t ON tr.tournament_id = t.id
+                  WHERE REPLACE(tr.licence, ' ', '') = REPLACE(r.licence, ' ', '')
+                  AND t.category_id = r.category_id
+                  AND t.season = r.season
+                  AND t.tournament_number <= 3), 0) as cumulated_points,
+        COALESCE((SELECT SUM(tr.reprises) FROM tournament_results tr
+                  JOIN tournaments t ON tr.tournament_id = t.id
+                  WHERE REPLACE(tr.licence, ' ', '') = REPLACE(r.licence, ' ', '')
+                  AND t.category_id = r.category_id
+                  AND t.season = r.season
+                  AND t.tournament_number <= 3), 0) as cumulated_reprises,
+        CASE WHEN p.licence IS NULL THEN 1 ELSE 0 END as missing_from_players
+      FROM rankings r
+      LEFT JOIN players p ON REPLACE(r.licence, ' ', '') = REPLACE(p.licence, ' ', '')
+      JOIN categories c ON r.category_id = c.id
+      LEFT JOIN club_aliases ca ON UPPER(REPLACE(REPLACE(REPLACE(COALESCE(p.club, ''), ' ', ''), '.', ''), '-', ''))
+                                 = UPPER(REPLACE(REPLACE(REPLACE(ca.alias, ' ', ''), '.', ''), '-', ''))
+      LEFT JOIN clubs ON UPPER(REPLACE(REPLACE(REPLACE(COALESCE(ca.canonical_name, p.club, ''), ' ', ''), '.', ''), '-', ''))
+                       = UPPER(REPLACE(REPLACE(REPLACE(clubs.name, ' ', ''), '.', ''), '-', ''))
+      WHERE r.category_id = ? AND r.season = ?
+      ORDER BY r.rank_position
+    `;
+
+    db.all(query, [categoryId, season], (err, rows) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      // Return rankings with tournaments played info
+      res.json({
+        rankings: rows,
+        tournamentsPlayed
+      });
+    });
   });
 });
 
@@ -78,13 +125,34 @@ router.get('/export', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'Category ID and season required' });
   }
 
+  // First, check which tournaments have been played
+  const tournamentsPlayedQuery = `
+    SELECT tournament_number FROM tournaments
+    WHERE category_id = ? AND season = ? AND tournament_number <= 3
+  `;
+
+  const tournamentRows = await new Promise((resolve, reject) => {
+    db.all(tournamentsPlayedQuery, [categoryId, season], (err, rows) => {
+      if (err) reject(err);
+      else resolve(rows || []);
+    });
+  });
+
+  const tournamentsPlayed = {
+    t1: tournamentRows.some(t => t.tournament_number === 1),
+    t2: tournamentRows.some(t => t.tournament_number === 2),
+    t3: tournamentRows.some(t => t.tournament_number === 3)
+  };
+
+  // Use LEFT JOIN for players to include ranked players even if not in players table
+  // Use club_aliases to resolve variant club names to canonical names
   const query = `
     SELECT
       r.rank_position,
       r.licence,
-      p.first_name,
-      p.last_name,
-      p.club,
+      COALESCE(p.first_name, (SELECT MAX(tr.player_name) FROM tournament_results tr WHERE REPLACE(tr.licence, ' ', '') = r.licence)) as first_name,
+      COALESCE(p.last_name, '') as last_name,
+      COALESCE(ca.canonical_name, p.club, 'Non renseigné') as club,
       r.total_match_points,
       r.avg_moyenne,
       r.best_serie,
@@ -108,9 +176,12 @@ router.get('/export', authenticateToken, async (req, res) => {
                 AND t.season = r.season
                 AND t.tournament_number <= 3), 0) as cumulated_reprises
     FROM rankings r
-    JOIN players p ON REPLACE(r.licence, ' ', '') = REPLACE(p.licence, ' ', '')
+    LEFT JOIN players p ON REPLACE(r.licence, ' ', '') = REPLACE(p.licence, ' ', '')
     JOIN categories c ON r.category_id = c.id
-    LEFT JOIN clubs ON REPLACE(REPLACE(REPLACE(UPPER(p.club), ' ', ''), '.', ''), '-', '') = REPLACE(REPLACE(REPLACE(UPPER(clubs.name), ' ', ''), '.', ''), '-', '')
+    LEFT JOIN club_aliases ca ON UPPER(REPLACE(REPLACE(REPLACE(COALESCE(p.club, ''), ' ', ''), '.', ''), '-', ''))
+                               = UPPER(REPLACE(REPLACE(REPLACE(ca.alias, ' ', ''), '.', ''), '-', ''))
+    LEFT JOIN clubs ON UPPER(REPLACE(REPLACE(REPLACE(COALESCE(ca.canonical_name, p.club, ''), ' ', ''), '.', ''), '-', ''))
+                     = UPPER(REPLACE(REPLACE(REPLACE(clubs.name, ' ', ''), '.', ''), '-', ''))
     WHERE r.category_id = ? AND r.season = ?
     ORDER BY r.rank_position
   `;
@@ -131,7 +202,7 @@ router.get('/export', authenticateToken, async (req, res) => {
       const categoryName = rows[0].display_name;
 
       // Add billiard ball image
-      const imagePath = path.join(__dirname, '../frontend/images/billiard-icon.png');
+      const imagePath = path.join(__dirname, '../../frontend/images/billiard-icon.png');
 
       try {
         const imageId = workbook.addImage({
@@ -190,18 +261,51 @@ router.get('/export', authenticateToken, async (req, res) => {
         'Meilleure Série'
       ];
 
-      // Style headers with gradient-like effect
-      worksheet.getRow(4).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-      worksheet.getRow(4).fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF1F4788' }
-      };
-      worksheet.getRow(4).alignment = { horizontal: 'center', vertical: 'middle' };
+      // Style headers (only columns 1-14)
       worksheet.getRow(4).height = 28;
-      worksheet.getRow(4).border = {
-        bottom: { style: 'medium', color: { argb: 'FF1F4788' } }
+      for (let col = 1; col <= 14; col++) {
+        const cell = worksheet.getRow(4).getCell(col);
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF1F4788' }
+        };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        cell.border = {
+          bottom: { style: 'medium', color: { argb: 'FF1F4788' } }
+        };
+      }
+
+      // Helper to format tournament points:
+      // - Tournament not played → "-"
+      // - Tournament played but player absent (null) → "*"
+      // - Tournament played and player participated → show points
+      const formatTournamentPoints = (points, tournamentPlayed) => {
+        if (!tournamentPlayed) return '-';
+        if (points === null) return '*';
+        return points;
       };
+
+      // Check if legend is needed (any absent players from PLAYED tournaments)
+      const hasAbsentPlayers = rows.some(r =>
+        (tournamentsPlayed.t1 && r.tournament_1_points === null) ||
+        (tournamentsPlayed.t2 && r.tournament_2_points === null) ||
+        (tournamentsPlayed.t3 && r.tournament_3_points === null)
+      );
+
+      // Add legend if needed
+      if (hasAbsentPlayers) {
+        worksheet.mergeCells('A3:M3');
+        worksheet.getCell('A3').value = '(*) Non-participation au tournoi concerné';
+        worksheet.getCell('A3').font = { size: 10, italic: true, color: { argb: 'FF666666' } };
+        worksheet.getCell('A3').alignment = { horizontal: 'left', vertical: 'middle' };
+      }
+
+      // Calculate number of qualified players for the final
+      // Rule: < 9 players → 4 qualified, >= 9 players → 6 qualified
+      const totalPlayers = rows.length;
+      const qualifiedCount = totalPlayers < 9 ? 4 : 6;
 
       // Data
       rows.forEach((row, index) => {
@@ -216,9 +320,9 @@ router.get('/export', authenticateToken, async (req, res) => {
           row.last_name,
           row.club,
           '', // Empty cell for logo
-          row.tournament_1_points,
-          row.tournament_2_points,
-          row.tournament_3_points,
+          formatTournamentPoints(row.tournament_1_points, tournamentsPlayed.t1),
+          formatTournamentPoints(row.tournament_2_points, tournamentsPlayed.t2),
+          formatTournamentPoints(row.tournament_3_points, tournamentsPlayed.t3),
           row.total_match_points,
           row.cumulated_points,
           row.cumulated_reprises,
@@ -226,47 +330,28 @@ router.get('/export', authenticateToken, async (req, res) => {
           row.best_serie || 0
         ]);
 
-        // Podium colors for top 3
-        if (row.rank_position === 1) {
-          // Gold
-          excelRow.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFFFD700' }
-          };
-          excelRow.font = { bold: true, size: 11 };
-          excelRow.getCell(1).value = '🥇 1';
-        } else if (row.rank_position === 2) {
-          // Silver
-          excelRow.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFC0C0C0' }
-          };
-          excelRow.font = { bold: true, size: 11 };
-          excelRow.getCell(1).value = '🥈 2';
-        } else if (row.rank_position === 3) {
-          // Bronze
-          excelRow.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFCD7F32' }
-          };
-          excelRow.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
-          excelRow.getCell(1).value = '🥉 3';
-        } else {
-          // Alternate row colors for others
-          if (index % 2 === 0) {
-            excelRow.fill = {
+        // Green highlighting for qualified players (only columns 1-14)
+        if (row.rank_position <= qualifiedCount) {
+          // Light green background for qualified players - apply to each cell individually
+          for (let col = 1; col <= 14; col++) {
+            excelRow.getCell(col).fill = {
               type: 'pattern',
               pattern: 'solid',
-              fgColor: { argb: 'FFF8F9FA' }
+              fgColor: { argb: 'FFE8F5E9' }  // Light green
             };
-          } else {
-            excelRow.fill = {
+            excelRow.getCell(col).font = { bold: true, size: 11 };
+          }
+          // Green position number
+          excelRow.getCell(1).font = { bold: true, size: 11, color: { argb: 'FF2E7D32' } };
+          excelRow.getCell(1).value = `✓ ${row.rank_position}`;
+        } else {
+          // Alternate row colors for non-qualified (only columns 1-14)
+          const bgColor = index % 2 === 0 ? 'FFF8F9FA' : 'FFFFFFFF';
+          for (let col = 1; col <= 14; col++) {
+            excelRow.getCell(col).fill = {
               type: 'pattern',
               pattern: 'solid',
-              fgColor: { argb: 'FFFFFFFF' }
+              fgColor: { argb: bgColor }
             };
           }
         }
