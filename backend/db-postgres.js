@@ -83,9 +83,15 @@ async function initializeDatabase() {
         season TEXT NOT NULL,
         import_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         tournament_date TIMESTAMP,
+        location TEXT,
         UNIQUE(category_id, tournament_number, season)
       )
     `);
+
+    // Add location column if missing (migration)
+    try {
+      await client.query('ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS location TEXT');
+    } catch (e) { /* Column might already exist */ }
 
     // Tournament results table
     await client.query(`
@@ -99,9 +105,15 @@ async function initializeDatabase() {
         serie INTEGER DEFAULT 0,
         points INTEGER DEFAULT 0,
         reprises INTEGER DEFAULT 0,
+        position INTEGER,
         UNIQUE(tournament_id, licence)
       )
     `);
+
+    // Add position column if missing (migration)
+    try {
+      await client.query('ALTER TABLE tournament_results ADD COLUMN IF NOT EXISTS position INTEGER');
+    } catch (e) { /* Column might already exist */ }
 
     // Rankings table
     await client.query(`
