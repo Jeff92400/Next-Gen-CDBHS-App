@@ -143,6 +143,70 @@ router.delete('/game-parameters/:id', authenticateToken, requireAdmin, (req, res
   );
 });
 
+// ============= APP SETTINGS =============
+
+// Initialize app_settings table if not exists
+const initAppSettings = async () => {
+  const db = getDb();
+  return new Promise((resolve) => {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `, [], (err) => {
+      if (err) console.error('Error creating app_settings table:', err);
+      // Insert default summary email if not exists
+      db.run(`
+        INSERT OR IGNORE INTO app_settings (key, value) VALUES ('summary_email', 'cdbhs92@gmail.com')
+      `, [], () => resolve());
+    });
+  });
+};
+
+// Get a setting by key
+router.get('/app/:key', authenticateToken, async (req, res) => {
+  const db = getDb();
+  const { key } = req.params;
+
+  await initAppSettings();
+
+  db.get(
+    'SELECT * FROM app_settings WHERE key = $1',
+    [key],
+    (err, row) => {
+      if (err) {
+        console.error('Error fetching setting:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      res.json(row || { key, value: null });
+    }
+  );
+});
+
+// Update a setting (admin only)
+router.put('/app/:key', authenticateToken, requireAdmin, async (req, res) => {
+  const db = getDb();
+  const { key } = req.params;
+  const { value } = req.body;
+
+  await initAppSettings();
+
+  db.run(
+    `INSERT INTO app_settings (key, value, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
+    [key, value],
+    function(err) {
+      if (err) {
+        console.error('Error updating setting:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      res.json({ success: true, message: 'Setting updated' });
+    }
+  );
+});
+
 // ============= EMAIL TEMPLATES =============
 
 // Get email template by key

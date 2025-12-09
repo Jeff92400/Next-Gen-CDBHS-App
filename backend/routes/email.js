@@ -8,6 +8,20 @@ const router = express.Router();
 // Helper function to add delay between emails (avoid rate limiting)
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Get summary email from app_settings (with fallback)
+async function getSummaryEmail() {
+  const db = require('../db-loader');
+  return new Promise((resolve) => {
+    db.get(
+      "SELECT value FROM app_settings WHERE key = 'summary_email'",
+      [],
+      (err, row) => {
+        resolve(row?.value || 'cdbhs92@gmail.com');
+      }
+    );
+  });
+}
+
 // Initialize Resend
 const getResend = () => {
   if (!process.env.RESEND_API_KEY) {
@@ -324,14 +338,17 @@ async function generateSummaryConvocationPDF(tournamentInfo, allPoules, location
           : gameParams.distance_normale;
         const coinLabel = gameParams.coin === 'GC' ? 'Grand Coin' : 'Petit Coin';
 
+        // Line 1: Distance / Coin / Reprises
         doc.fillColor('#333333').fontSize(10).font('Helvetica-Bold')
            .text(`${distance} points  /  ${coinLabel}  /  en ${gameParams.reprises} reprises`, 40, y, { width: pageWidth, align: 'center' });
         y += 15;
 
+        // Line 2: Moyenne qualificative
         doc.fillColor('#666666').fontSize(9).font('Helvetica-Oblique')
            .text(`La moyenne qualificative pour cette categorie est entre ${parseFloat(gameParams.moyenne_mini).toFixed(3)} et ${parseFloat(gameParams.moyenne_maxi).toFixed(3)}`, 40, y, { width: pageWidth, align: 'center' });
         y += 12;
 
+        // Line 3: Explanation of Moyenne and Classement columns
         doc.fillColor('#666666').fontSize(8).font('Helvetica-Oblique')
            .text(`Les colonnes Moyenne et Classement en face du nom de chaque joueur correspondent aux positions cumulees a la suite du dernier tournoi joue`, 40, y, { width: pageWidth, align: 'center' });
         y += 20;
@@ -339,8 +356,11 @@ async function generateSummaryConvocationPDF(tournamentInfo, allPoules, location
         y += 10;
       }
 
+      // NO personalized player box - go straight to poules
+
       // ALL POULES
       for (const poule of allPoules) {
+        // Check if we need a new page
         const estimatedHeight = 80 + (poule.players.length * 22);
         if (y + estimatedHeight > doc.page.height - 60) {
           doc.addPage();
@@ -355,6 +375,7 @@ async function generateSummaryConvocationPDF(tournamentInfo, allPoules, location
         const fullAddress = [locStreet, locZipCode, locCity].filter(Boolean).join(' ');
         const locTime = loc?.startTime || '14:00';
 
+        // Location header bar
         doc.rect(40, y, pageWidth, 24).fill(accentColor);
         doc.fillColor('#333333').fontSize(10).font('Helvetica-Bold')
            .text(`${locName.toUpperCase()}`, 50, y + 6);
@@ -362,11 +383,13 @@ async function generateSummaryConvocationPDF(tournamentInfo, allPoules, location
            250, y + 6, { width: pageWidth - 220, align: 'right' });
         y += 28;
 
+        // Poule title
         doc.rect(40, y, pageWidth, 22).fill(primaryColor);
         doc.fillColor('white').fontSize(11).font('Helvetica-Bold')
            .text(`POULE ${poule.number}`, 50, y + 5);
         y += 26;
 
+        // Table headers - with ranking columns
         doc.rect(40, y, pageWidth, 20).fill(secondaryColor);
         doc.fillColor('white').fontSize(8).font('Helvetica-Bold');
         doc.text('#', 45, y + 5, { width: 20 });
@@ -378,9 +401,12 @@ async function generateSummaryConvocationPDF(tournamentInfo, allPoules, location
         doc.text('Class.', 490, y + 5, { width: 40, align: 'center' });
         y += 22;
 
+        // Players
         poule.players.forEach((p, pIndex) => {
           const isEven = pIndex % 2 === 0;
           const rowColor = isEven ? '#FFFFFF' : lightGray;
+
+          // Get ranking info for this player
           const normLicence = (p.licence || '').replace(/\s+/g, '');
           const playerRanking = rankingData[normLicence] || {};
 
@@ -391,6 +417,7 @@ async function generateSummaryConvocationPDF(tournamentInfo, allPoules, location
           doc.text((p.last_name || '').toUpperCase(), 130, y + 5, { width: 100 });
           doc.text(p.first_name || '', 235, y + 5, { width: 80 });
           doc.fontSize(7).text(p.club || '', 320, y + 6, { width: 120 });
+          // Moyenne and Classement columns
           doc.fontSize(8);
           doc.text(playerRanking.moyenne || '-', 445, y + 5, { width: 40, align: 'center' });
           doc.text(playerRanking.rank ? String(playerRanking.rank) : '-', 490, y + 5, { width: 40, align: 'center' });
@@ -400,6 +427,7 @@ async function generateSummaryConvocationPDF(tournamentInfo, allPoules, location
         y += 15;
       }
 
+      // Note at the bottom
       if (y + 60 > doc.page.height - 40) {
         doc.addPage();
         y = 40;
@@ -409,6 +437,7 @@ async function generateSummaryConvocationPDF(tournamentInfo, allPoules, location
          .text("Les joueurs d'un meme club jouent ensemble au 1er tour", 40, y, { width: pageWidth, align: 'center' });
       y += 25;
 
+      // Footer
       doc.fillColor('#999999').fontSize(9).font('Helvetica-Oblique')
          .text(`Comite Departemental Billard Hauts-de-Seine - ${new Date().toLocaleDateString('fr-FR')}`,
                 40, y, { width: pageWidth, align: 'center' });
@@ -595,11 +624,10 @@ router.post('/send-convocations', authenticateToken, async (req, res) => {
       // Convert newlines to <br> for HTML
       const emailBodyHtml = emailBodyText.replace(/\n/g, '<br>');
 
-      // Send email using Resend
+      // Send email using Resend (no CC - summary email sent at the end)
       const emailResult = await resend.emails.send({
         from: 'CDBHS Convocations <convocations@cdbhs.net>',
         to: [player.email],
-        cc: ['cdbhs92@gmail.com'],
         subject: emailSubject,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -656,9 +684,94 @@ router.post('/send-convocations', authenticateToken, async (req, res) => {
     }
   }
 
+  // Send summary email after all individual emails
+  const summaryEmailAddress = await getSummaryEmail();
+  if (results.sent.length > 0 && summaryEmailAddress) {
+    try {
+      // Build recipient list HTML
+      const recipientListHtml = results.sent.map((r, idx) =>
+        `<tr style="background: ${idx % 2 === 0 ? 'white' : '#f8f9fa'};">
+          <td style="padding: 8px; border: 1px solid #ddd;">${idx + 1}</td>
+          <td style="padding: 8px; border: 1px solid #ddd;">${r.name}</td>
+          <td style="padding: 8px; border: 1px solid #ddd;">${r.email}</td>
+        </tr>`
+      ).join('');
+
+      // Build poules summary
+      const poulesSummaryHtml = poules.map(poule => {
+        const locNum = poule.locationNum || '1';
+        const loc = locations.find(l => l.locationNum === locNum) || locations[0];
+        return `<div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 4px;">
+          <strong>Poule ${poule.number}</strong> - ${loc?.name || 'Lieu non défini'} (${loc?.startTime || '13:30'})
+          <div style="font-size: 12px; color: #666; margin-top: 5px;">
+            ${poule.players.map(p => `${p.first_name} ${p.last_name}`).join(', ')}
+          </div>
+        </div>`;
+      }).join('');
+
+      const summaryHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto;">
+          <div style="background: #1F4788; color: white; padding: 20px; text-align: center;">
+            <img src="https://cdbhs-tournament-management-production.up.railway.app/images/billiard-icon.png" alt="CDBHS" style="height: 50px; margin-bottom: 10px;" onerror="this.style.display='none'">
+            <h1 style="margin: 0; font-size: 24px;">📋 Récapitulatif Convocations</h1>
+            <p style="margin: 10px 0 0 0; opacity: 0.9;">${category.display_name}</p>
+          </div>
+          <div style="padding: 20px; background: #f8f9fa; line-height: 1.6;">
+            <div style="background: #d4edda; border-left: 4px solid #28a745; padding: 15px; margin-bottom: 20px;">
+              <strong>✅ Envoi terminé avec succès</strong><br>
+              ${results.sent.length} convocation(s) envoyée(s) sur ${players.length} joueur(s)
+              ${results.failed.length > 0 ? `<br><span style="color: #dc3545;">${results.failed.length} échec(s)</span>` : ''}
+              ${results.skipped.length > 0 ? `<br><span style="color: #856404;">${results.skipped.length} ignoré(s) (pas d'email)</span>` : ''}
+            </div>
+
+            <div style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd;">
+              <h3 style="margin-top: 0; color: #1F4788;">📍 Informations du Tournoi</h3>
+              <p><strong>Catégorie :</strong> ${category.display_name}</p>
+              <p><strong>Compétition :</strong> ${tournamentLabel}</p>
+              <p><strong>Date :</strong> ${dateStr}</p>
+              ${specialNote ? `<p style="color: #856404;"><strong>Note spéciale :</strong> ${specialNote}</p>` : ''}
+            </div>
+
+            <h3 style="color: #1F4788;">📧 Convocations Envoyées (${results.sent.length})</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px;">
+              <thead>
+                <tr style="background: #1F4788; color: white;">
+                  <th style="padding: 10px; border: 1px solid #ddd;">#</th>
+                  <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Joueur</th>
+                  <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Email</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${recipientListHtml}
+              </tbody>
+            </table>
+
+            <h3 style="color: #28a745;">🎱 Composition des Poules (${poules.length})</h3>
+            ${poulesSummaryHtml}
+          </div>
+          <div style="background: #1F4788; color: white; padding: 10px; text-align: center; font-size: 12px;">
+            <p style="margin: 0;">CDBHS - cdbhs92@gmail.com</p>
+          </div>
+        </div>
+      `;
+
+      await resend.emails.send({
+        from: 'CDBHS Convocations <convocations@cdbhs.net>',
+        to: [summaryEmailAddress],
+        subject: `📋 Récapitulatif - Convocations ${category.display_name} - ${tournamentLabel} - ${dateStr}`,
+        html: summaryHtml
+      });
+
+      console.log(`Summary email sent to ${summaryEmailAddress}`);
+    } catch (summaryError) {
+      console.error('Error sending summary email:', summaryError);
+      // Don't fail the whole operation if summary email fails
+    }
+  }
+
   res.json({
     success: true,
-    message: `Emails envoyes: ${results.sent.length}, Echecs: ${results.failed.length}, Ignores: ${results.skipped.length}`,
+    message: `Emails envoyes: ${results.sent.length}, Echecs: ${results.failed.length}, Ignores: ${results.skipped.length}${results.sent.length > 0 ? ' + récapitulatif envoyé' : ''}`,
     results
   });
 });
