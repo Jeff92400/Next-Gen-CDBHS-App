@@ -244,6 +244,76 @@ async function initializeDatabase() {
       )
     `);
 
+    // Player contacts table - centralized contact information
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS player_contacts (
+        id SERIAL PRIMARY KEY,
+        licence TEXT UNIQUE,
+        first_name TEXT,
+        last_name TEXT,
+        club TEXT,
+        email TEXT,
+        telephone TEXT,
+        rank_libre TEXT,
+        rank_cadre TEXT,
+        rank_bande TEXT,
+        rank_3bandes TEXT,
+        statut TEXT DEFAULT 'Actif',
+        comments TEXT,
+        email_optin INTEGER DEFAULT 1,
+        last_contacted TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Email campaigns table - history of sent emails
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS email_campaigns (
+        id SERIAL PRIMARY KEY,
+        subject TEXT NOT NULL,
+        body TEXT NOT NULL,
+        template_key TEXT,
+        recipients_count INTEGER DEFAULT 0,
+        sent_count INTEGER DEFAULT 0,
+        failed_count INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'draft',
+        sent_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Scheduled emails table - for future email sending
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS scheduled_emails (
+        id SERIAL PRIMARY KEY,
+        subject TEXT NOT NULL,
+        body TEXT NOT NULL,
+        template_key TEXT,
+        image_url TEXT,
+        recipient_ids TEXT NOT NULL,
+        scheduled_at TIMESTAMP NOT NULL,
+        status TEXT DEFAULT 'pending',
+        sent_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // App settings table - configurable application settings
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Insert default summary email if not exists
+    await client.query(`
+      INSERT INTO app_settings (key, value) VALUES ('summary_email', 'cdbhs92@gmail.com')
+      ON CONFLICT (key) DO NOTHING
+    `);
+
     await client.query('COMMIT');
 
     // Initialize default admin (legacy)
