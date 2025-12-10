@@ -877,7 +877,8 @@ router.post('/send-results', authenticateToken, async (req, res) => {
     // Get tournament results with emails (use stored position from import)
     const results = await new Promise((resolve, reject) => {
       db.all(`
-        SELECT tr.*, pc.email, pc.first_name, pc.last_name
+        SELECT tr.*, pc.email, pc.first_name, pc.last_name,
+               COALESCE(pc.first_name || ' ' || pc.last_name, tr.player_name) as display_name
         FROM tournament_results tr
         LEFT JOIN player_contacts pc ON REPLACE(tr.licence, ' ', '') = REPLACE(pc.licence, ' ', '')
         WHERE tr.tournament_id = $1
@@ -985,7 +986,7 @@ router.post('/send-results', authenticateToken, async (req, res) => {
           return `
             <tr style="background: ${bgColor};">
               <td style="padding: 10px; text-align: center; border: 1px solid #ddd; font-weight: ${fontWeight};">${r.position}</td>
-              <td style="padding: 10px; text-align: left; border: 1px solid #ddd; font-weight: ${fontWeight};">${arrow}${r.player_name}</td>
+              <td style="padding: 10px; text-align: left; border: 1px solid #ddd; font-weight: ${fontWeight};">${arrow}${r.display_name}</td>
               <td style="padding: 10px; text-align: center; border: 1px solid #ddd; font-weight: ${fontWeight};">${r.match_points || '-'}</td>
               <td style="padding: 10px; text-align: center; border: 1px solid #ddd; font-weight: ${fontWeight};">${moyenne}</td>
             </tr>
@@ -1155,7 +1156,7 @@ router.post('/send-results', authenticateToken, async (req, res) => {
           return `
             <tr style="background: ${r.position % 2 === 0 ? '#f8f9fa' : 'white'};">
               <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">${r.position}</td>
-              <td style="padding: 8px; border: 1px solid #ddd;">${r.player_name}</td>
+              <td style="padding: 8px; border: 1px solid #ddd;">${r.display_name}</td>
               <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">${r.match_points || '-'}</td>
               <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">${moyenne}</td>
             </tr>
