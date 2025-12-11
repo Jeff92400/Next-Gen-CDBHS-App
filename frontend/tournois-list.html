@@ -56,18 +56,35 @@
 
     <div id="errorMessage" class="error" style="display: none;"></div>
 
+    <!-- Total stats (all time) - smaller -->
+    <div class="stats-grid" style="margin-bottom: 10px;">
+      <div class="stat-card" style="padding: 12px 15px;">
+        <h4 style="font-size: 12px; margin-bottom: 5px;">Total Tournois (toutes saisons)</h4>
+        <div class="stat-value" id="totalCount" style="font-size: 28px;">-</div>
+      </div>
+      <div class="stat-card" style="padding: 12px 15px;">
+        <h4 style="font-size: 12px; margin-bottom: 5px;">A venir (toutes saisons)</h4>
+        <div class="stat-value" id="upcomingCount" style="font-size: 28px;">-</div>
+      </div>
+      <div class="stat-card" style="padding: 12px 15px;">
+        <h4 style="font-size: 12px; margin-bottom: 5px;">Passés (toutes saisons)</h4>
+        <div class="stat-value" id="pastCount" style="font-size: 28px;">-</div>
+      </div>
+    </div>
+
+    <!-- Current season stats - green theme -->
     <div class="stats-grid" style="margin-bottom: 20px;">
-      <div class="stat-card">
-        <h4>Total Tournois</h4>
-        <div class="stat-value" id="totalCount">-</div>
+      <div class="stat-card" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+        <h4 id="seasonTotalLabel">Total Saison en cours</h4>
+        <div class="stat-value" id="seasonTotalCount">-</div>
       </div>
-      <div class="stat-card">
-        <h4>Tournois à venir</h4>
-        <div class="stat-value" id="upcomingCount">-</div>
+      <div class="stat-card" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+        <h4 id="seasonUpcomingLabel">A venir Saison en cours</h4>
+        <div class="stat-value" id="seasonUpcomingCount">-</div>
       </div>
-      <div class="stat-card">
-        <h4>Tournois passés</h4>
-        <div class="stat-value" id="pastCount">-</div>
+      <div class="stat-card" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+        <h4 id="seasonPastLabel">Passés Saison en cours</h4>
+        <div class="stat-value" id="seasonPastCount">-</div>
       </div>
     </div>
 
@@ -251,6 +268,9 @@
         document.getElementById('totalCount').textContent = allTournois.length;
         document.getElementById('upcomingCount').textContent = upcomingTournois.length;
         document.getElementById('pastCount').textContent = pastTournois.length;
+
+        // Update season stats
+        updateSeasonStats();
 
         displayTournois(allTournois);
 
@@ -526,6 +546,40 @@
     document.getElementById('modeFilter').addEventListener('change', applyFilters);
     document.getElementById('categorieFilter').addEventListener('change', applyFilters);
     document.getElementById('searchInput').addEventListener('input', applyFilters);
+
+    // Update season-specific stats
+    function updateSeasonStats() {
+      const currentSeason = getSeasonForDate(new Date());
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // Filter tournaments by current season
+      const seasonTournois = allTournois.filter(t => {
+        if (!t.debut) return false;
+        const date = new Date(t.debut);
+        return getSeasonForDate(date) === currentSeason;
+      });
+
+      const seasonUpcoming = seasonTournois.filter(t => {
+        const debut = t.debut ? new Date(t.debut) : null;
+        return debut && debut >= today;
+      });
+
+      const seasonPast = seasonTournois.filter(t => {
+        const debut = t.debut ? new Date(t.debut) : null;
+        return debut && debut < today;
+      });
+
+      // Update labels with current season
+      document.getElementById('seasonTotalLabel').textContent = `Total Saison ${currentSeason}`;
+      document.getElementById('seasonUpcomingLabel').textContent = `A venir Saison ${currentSeason}`;
+      document.getElementById('seasonPastLabel').textContent = `Passés Saison ${currentSeason}`;
+
+      // Update values
+      document.getElementById('seasonTotalCount').textContent = seasonTournois.length;
+      document.getElementById('seasonUpcomingCount').textContent = seasonUpcoming.length;
+      document.getElementById('seasonPastCount').textContent = seasonPast.length;
+    }
 
     // Initialize
     loadTournois();
