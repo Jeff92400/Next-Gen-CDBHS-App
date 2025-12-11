@@ -56,18 +56,35 @@
 
     <div id="errorMessage" class="error" style="display: none;"></div>
 
+    <!-- Total stats (all time) - smaller -->
+    <div class="stats-grid" style="margin-bottom: 10px;">
+      <div class="stat-card" style="padding: 12px 15px;">
+        <h4 style="font-size: 12px; margin-bottom: 5px;">Total Inscriptions (toutes saisons)</h4>
+        <div class="stat-value" id="totalCount" style="font-size: 28px;">-</div>
+      </div>
+      <div class="stat-card" style="padding: 12px 15px;">
+        <h4 style="font-size: 12px; margin-bottom: 5px;">Convoqués (toutes saisons)</h4>
+        <div class="stat-value" id="convoqueCount" style="font-size: 28px;">-</div>
+      </div>
+      <div class="stat-card" style="padding: 12px 15px;">
+        <h4 style="font-size: 12px; margin-bottom: 5px;">Forfaits (toutes saisons)</h4>
+        <div class="stat-value" id="forfaitCount" style="font-size: 28px;">-</div>
+      </div>
+    </div>
+
+    <!-- Current season stats - green theme -->
     <div class="stats-grid" style="margin-bottom: 20px;">
-      <div class="stat-card">
-        <h4>Total Inscriptions</h4>
-        <div class="stat-value" id="totalCount">-</div>
+      <div class="stat-card" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+        <h4 id="seasonTotalLabel">Inscriptions Saison en cours</h4>
+        <div class="stat-value" id="seasonTotalCount">-</div>
       </div>
-      <div class="stat-card">
-        <h4>Convoqués</h4>
-        <div class="stat-value" id="convoqueCount">-</div>
+      <div class="stat-card" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+        <h4 id="seasonConvoqueLabel">Convoqués Saison en cours</h4>
+        <div class="stat-value" id="seasonConvoqueCount">-</div>
       </div>
-      <div class="stat-card">
-        <h4>Forfaits</h4>
-        <div class="stat-value" id="forfaitCount">-</div>
+      <div class="stat-card" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+        <h4 id="seasonForfaitLabel">Forfaits Saison en cours</h4>
+        <div class="stat-value" id="seasonForfaitCount">-</div>
       </div>
     </div>
 
@@ -284,13 +301,16 @@
         // Populate season filter
         populateSeasonFilter();
 
-        // Calculate stats
+        // Calculate total stats (all time)
         const convoques = allInscriptions.filter(i => i.convoque === 1);
         const forfaits = allInscriptions.filter(i => i.forfait === 1);
 
         document.getElementById('totalCount').textContent = allInscriptions.length;
         document.getElementById('convoqueCount').textContent = convoques.length;
         document.getElementById('forfaitCount').textContent = forfaits.length;
+
+        // Calculate current season stats
+        updateSeasonStats();
 
         displayInscriptions(allInscriptions);
 
@@ -318,6 +338,32 @@
       } else {
         return `${year - 1}-${year}`;
       }
+    }
+
+    // Update current season stats
+    function updateSeasonStats() {
+      const currentSeason = getSeasonForDate(new Date());
+
+      // Filter inscriptions for current season
+      const seasonInscriptions = allInscriptions.filter(i => {
+        const tournoi = getTournoiById(i.tournoi_id);
+        if (!tournoi.debut) return false;
+        const date = new Date(tournoi.debut);
+        return getSeasonForDate(date) === currentSeason;
+      });
+
+      const seasonConvoques = seasonInscriptions.filter(i => i.convoque === 1);
+      const seasonForfaits = seasonInscriptions.filter(i => i.forfait === 1);
+
+      // Update labels with season
+      document.getElementById('seasonTotalLabel').textContent = `Inscriptions Saison ${currentSeason}`;
+      document.getElementById('seasonConvoqueLabel').textContent = `Convoqués Saison ${currentSeason}`;
+      document.getElementById('seasonForfaitLabel').textContent = `Forfaits Saison ${currentSeason}`;
+
+      // Update values
+      document.getElementById('seasonTotalCount').textContent = seasonInscriptions.length;
+      document.getElementById('seasonConvoqueCount').textContent = seasonConvoques.length;
+      document.getElementById('seasonForfaitCount').textContent = seasonForfaits.length;
     }
 
     // Populate season filter
