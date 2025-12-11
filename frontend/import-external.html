@@ -67,13 +67,13 @@
     </div>
 
     <div class="card">
-      <h3>Données actuelles</h3>
+      <h3 id="statsTitle">Données saison en cours</h3>
       <div class="stats-grid">
-        <div class="stat-card">
-          <h4>Compétitions IONOS</h4>
+        <div class="stat-card" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+          <h4>Compétitions</h4>
           <div class="stat-value" id="currentTournoiCount">-</div>
         </div>
-        <div class="stat-card">
+        <div class="stat-card" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
           <h4>Inscriptions</h4>
           <div class="stat-value" id="currentInscriptionCount">-</div>
         </div>
@@ -144,23 +144,59 @@
       document.getElementById('inscriptionFileName')
     );
 
-    // Load current stats
+    // Get season for a given date (Sept-Aug cycle)
+    function getSeasonForDate(date) {
+      const year = date.getFullYear();
+      const month = date.getMonth(); // 0-11
+      if (month >= 8) {
+        return `${year}-${year + 1}`;
+      } else {
+        return `${year - 1}-${year}`;
+      }
+    }
+
+    // Load current season stats
     async function loadStats() {
       try {
+        const currentSeason = getSeasonForDate(new Date());
+
+        // Update title with season
+        document.getElementById('statsTitle').textContent = `Données saison ${currentSeason}`;
+
         const tournoiRes = await fetch(`${API_URL}/inscriptions/tournoi`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
+
+        let allTournois = [];
+        let tournoiMap = {};
+
         if (tournoiRes.ok) {
-          const tournois = await tournoiRes.json();
-          document.getElementById('currentTournoiCount').textContent = tournois.length;
+          allTournois = await tournoiRes.json();
+          allTournois.forEach(t => { tournoiMap[t.tournoi_id] = t; });
+
+          // Filter by current season
+          const seasonTournois = allTournois.filter(t => {
+            if (!t.debut) return false;
+            const date = new Date(t.debut);
+            return getSeasonForDate(date) === currentSeason;
+          });
+          document.getElementById('currentTournoiCount').textContent = seasonTournois.length;
         }
 
         const inscriptionRes = await fetch(`${API_URL}/inscriptions`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (inscriptionRes.ok) {
-          const inscriptions = await inscriptionRes.json();
-          document.getElementById('currentInscriptionCount').textContent = inscriptions.length;
+          const allInscriptions = await inscriptionRes.json();
+
+          // Filter inscriptions by current season (based on tournament date)
+          const seasonInscriptions = allInscriptions.filter(i => {
+            const tournoi = tournoiMap[i.tournoi_id];
+            if (!tournoi || !tournoi.debut) return false;
+            const date = new Date(tournoi.debut);
+            return getSeasonForDate(date) === currentSeason;
+          });
+          document.getElementById('currentInscriptionCount').textContent = seasonInscriptions.length;
         }
       } catch (error) {
         console.error('Error loading stats:', error);
