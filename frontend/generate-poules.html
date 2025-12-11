@@ -732,6 +732,17 @@
       return { text: ageText, color: ageColor, isOld };
     }
 
+    // Get season for a given date (Sept-Aug cycle)
+    function getSeasonForDate(date) {
+      const year = date.getFullYear();
+      const month = date.getMonth(); // 0-11
+      if (month >= 8) {
+        return `${year}-${year + 1}`;
+      } else {
+        return `${year - 1}-${year}`;
+      }
+    }
+
     // Load and display last import dates for all file types
     async function loadLastImportDate() {
       try {
@@ -744,17 +755,55 @@
         if (response.ok) {
           const data = await response.json();
 
+          // Get current season
+          const currentSeason = getSeasonForDate(new Date());
+
+          // Fetch tournois and inscriptions to calculate season-specific counts
+          let seasonTournoiCount = 0;
+          let seasonInscriptionCount = 0;
+          let tournoiMap = {};
+
+          try {
+            const tournoiRes = await fetch(`${API_URL}/inscriptions/tournoi`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (tournoiRes.ok) {
+              const tournois = await tournoiRes.json();
+              tournois.forEach(t => { tournoiMap[t.tournoi_id] = t; });
+              seasonTournoiCount = tournois.filter(t => {
+                if (!t.debut) return false;
+                return getSeasonForDate(new Date(t.debut)) === currentSeason;
+              }).length;
+            }
+
+            const inscRes = await fetch(`${API_URL}/inscriptions`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (inscRes.ok) {
+              const inscriptions = await inscRes.json();
+              seasonInscriptionCount = inscriptions.filter(i => {
+                const tournoi = tournoiMap[i.tournoi_id];
+                if (!tournoi || !tournoi.debut) return false;
+                return getSeasonForDate(new Date(tournoi.debut)) === currentSeason;
+              }).length;
+            }
+          } catch (e) {
+            console.error('Error fetching season counts:', e);
+          }
+
           const fileTypes = [
-            { key: 'inscriptions', label: 'Inscriptions', icon: '📝' },
-            { key: 'tournois', label: 'Tournois', icon: '🏆' },
-            { key: 'joueurs', label: 'Joueurs', icon: '👥' }
+            { key: 'inscriptions', label: 'Inscriptions', icon: '📝', seasonCount: seasonInscriptionCount },
+            { key: 'tournois', label: 'Tournois', icon: '🏆', seasonCount: seasonTournoiCount },
+            { key: 'joueurs', label: 'Joueurs', icon: '👥', seasonCount: null }
           ];
 
-          let html = '<div style="display: grid; gap: 8px;">';
+          let html = `<div style="display: grid; gap: 8px;">`;
+          html += `<div style="font-size: 11px; color: #856404; margin-bottom: 5px;">Saison ${currentSeason}</div>`;
 
           fileTypes.forEach(ft => {
             const info = data[ft.key];
             const age = formatImportAge(info?.importDate);
+            const countDisplay = ft.seasonCount !== null ? ft.seasonCount : (info?.recordCount || 0);
 
             html += `
               <div style="display: flex; align-items: center; gap: 10px;">
@@ -762,7 +811,7 @@
                 <span style="min-width: 100px; color: #856404; font-weight: 500;">${ft.label}:</span>
                 <span style="color: ${age.color}; font-weight: ${age.isOld ? 'bold' : 'normal'};">
                   ${age.text}
-                  ${info?.recordCount ? `<span style="color: #666; font-weight: normal;"> (${info.recordCount} enregistrements)</span>` : ''}
+                  <span style="color: #666; font-weight: normal;"> (${countDisplay} enregistrements)</span>
                 </span>
               </div>
             `;
