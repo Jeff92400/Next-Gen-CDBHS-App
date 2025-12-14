@@ -231,7 +231,7 @@
     // Load tournois for filter and display
     async function loadTournois() {
       try {
-        const response = await fetch(`${API_URL}/inscriptions/tournois-ext`, {
+        const response = await fetch(`${API_URL}/inscriptions/tournoi`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }

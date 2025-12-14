@@ -463,7 +463,7 @@
         });
 
         // Load tournois for date reference
-        const tournoisResponse = await fetch(`${API_URL}/inscriptions/tournois-ext`, {
+        const tournoisResponse = await fetch(`${API_URL}/inscriptions/tournoi`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -504,7 +504,7 @@
     // Load tournois stats (current season only)
     async function loadTournoisStats() {
       try {
-        const response = await fetch(`${API_URL}/inscriptions/tournois-ext`, {
+        const response = await fetch(`${API_URL}/inscriptions/tournoi`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
