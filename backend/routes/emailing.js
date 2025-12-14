@@ -777,19 +777,38 @@ router.get('/tournament-results/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Tournoi non trouvé' });
     }
 
-    // Get tournament results with emails from player_contacts
-    // Use stored position from import
+    // Find the matching tournoi_ext based on mode, category and date
+    // This allows us to get the email from the inscription for THIS specific tournament
+    const matchingTournoi = await new Promise((resolve, reject) => {
+      db.get(`
+        SELECT te.tournoi_id
+        FROM tournoi_ext te
+        WHERE UPPER(te.mode) = UPPER($1)
+          AND UPPER(te.categorie) = UPPER($2)
+          AND DATE(te.debut) = DATE($3)
+        LIMIT 1
+      `, [tournament.game_type, tournament.level, tournament.tournament_date], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    // Get tournament results with emails
+    // Priority: 1) Email from inscription for THIS tournament, 2) Email from player_contacts
     const results = await new Promise((resolve, reject) => {
       db.all(`
         SELECT tr.*,
-               pc.email,
+               COALESCE(insc.email, pc.email) as email,
                pc.first_name as contact_first_name,
                pc.last_name as contact_last_name
         FROM tournament_results tr
         LEFT JOIN player_contacts pc ON REPLACE(tr.licence, ' ', '') = REPLACE(pc.licence, ' ', '')
+        LEFT JOIN inscriptions insc ON REPLACE(tr.licence, ' ', '') = REPLACE(insc.licence, ' ', '')
+          AND insc.tournoi_id = $2
+          AND insc.email IS NOT NULL AND insc.email != '' AND insc.email LIKE '%@%'
         WHERE tr.tournament_id = $1
         ORDER BY tr.position ASC
-      `, [id], (err, rows) => {
+      `, [id, matchingTournoi?.tournoi_id || -1], (err, rows) => {
         if (err) reject(err);
         else resolve(rows || []);
       });
@@ -874,16 +893,41 @@ router.post('/send-results', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Tournoi non trouvé' });
     }
 
-    // Get tournament results with emails (use stored position from import)
+    // Find the matching tournoi_ext based on mode, category and date
+    // This allows us to get the email from the inscription for THIS specific tournament
+    const matchingTournoi = await new Promise((resolve, reject) => {
+      db.get(`
+        SELECT te.tournoi_id
+        FROM tournoi_ext te
+        WHERE UPPER(te.mode) = UPPER($1)
+          AND UPPER(te.categorie) = UPPER($2)
+          AND DATE(te.debut) = DATE($3)
+        LIMIT 1
+      `, [tournament.game_type, tournament.level, tournament.tournament_date], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    console.log('Matching tournoi_ext for results email:', matchingTournoi,
+                'mode:', tournament.game_type, 'cat:', tournament.level, 'date:', tournament.tournament_date);
+
+    // Get tournament results with emails
+    // Priority: 1) Email from inscription for THIS tournament, 2) Email from player_contacts
     const results = await new Promise((resolve, reject) => {
       db.all(`
-        SELECT tr.*, pc.email, pc.first_name, pc.last_name,
+        SELECT tr.*,
+               COALESCE(insc.email, pc.email) as email,
+               pc.first_name, pc.last_name,
                COALESCE(pc.first_name || ' ' || pc.last_name, tr.player_name) as display_name
         FROM tournament_results tr
         LEFT JOIN player_contacts pc ON REPLACE(tr.licence, ' ', '') = REPLACE(pc.licence, ' ', '')
+        LEFT JOIN inscriptions insc ON REPLACE(tr.licence, ' ', '') = REPLACE(insc.licence, ' ', '')
+          AND insc.tournoi_id = $2
+          AND insc.email IS NOT NULL AND insc.email != '' AND insc.email LIKE '%@%'
         WHERE tr.tournament_id = $1
         ORDER BY tr.position ASC
-      `, [tournamentId], (err, rows) => {
+      `, [tournamentId, matchingTournoi?.tournoi_id || -1], (err, rows) => {
         if (err) reject(err);
         else resolve(rows || []);
       });
