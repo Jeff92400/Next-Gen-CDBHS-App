@@ -430,8 +430,9 @@
           document.getElementById('activePlayerCount').textContent = activePlayers.length;
         }
 
-        // Load tournaments (played)
-        const tournamentsResponse = await fetch(`${API_URL}/tournaments`, {
+        // Load tournaments (played) for current season
+        const currentSeason = getSeasonForDate(new Date());
+        const tournamentsResponse = await fetch(`${API_URL}/tournaments?season=${currentSeason}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
