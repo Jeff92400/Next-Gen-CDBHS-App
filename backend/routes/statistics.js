@@ -76,15 +76,16 @@ router.get('/debug/podiums', async (req, res) => {
     ORDER BY c.game_type
   `;
 
-  // Third query: sample position values for BANDE and CADRE
+  // Third query: list all tournaments with their details
   const query3 = `
-    SELECT DISTINCT c.game_type, tr.position, COUNT(*) as count
-    FROM tournament_results tr
-    JOIN tournaments t ON tr.tournament_id = t.id
+    SELECT t.id, t.tournament_number, t.season, t.tournament_date, c.game_type, c.display_name,
+           COUNT(tr.id) as result_count
+    FROM tournaments t
     JOIN categories c ON t.category_id = c.id
-    WHERE t.season = $1 AND c.game_type IN ('BANDE', 'CADRE')
-    GROUP BY c.game_type, tr.position
-    ORDER BY c.game_type, tr.position
+    LEFT JOIN tournament_results tr ON tr.tournament_id = t.id
+    WHERE t.season = $1
+    GROUP BY t.id, t.tournament_number, t.season, t.tournament_date, c.game_type, c.display_name
+    ORDER BY c.game_type, t.tournament_number
   `;
 
   try {
@@ -96,11 +97,11 @@ router.get('/debug/podiums', async (req, res) => {
       db.all(query2, [targetSeason], (err, rows) => err ? reject(err) : resolve(rows));
     });
 
-    const positionSamples = await new Promise((resolve, reject) => {
+    const tournaments = await new Promise((resolve, reject) => {
       db.all(query3, [targetSeason], (err, rows) => err ? reject(err) : resolve(rows));
     });
 
-    res.json({ gameTypes, results, positionSamples, season: targetSeason });
+    res.json({ gameTypes, results, tournaments, season: targetSeason });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
