@@ -46,6 +46,17 @@ router.get('/debug/podiums', async (req, res) => {
     ORDER BY c.game_type
   `;
 
+  // Third query: sample position values for BANDE and CADRE
+  const query3 = `
+    SELECT DISTINCT c.game_type, tr.position, COUNT(*) as count
+    FROM tournament_results tr
+    JOIN tournaments t ON tr.tournament_id = t.id
+    JOIN categories c ON t.category_id = c.id
+    WHERE t.season = $1 AND c.game_type IN ('BANDE', 'CADRE')
+    GROUP BY c.game_type, tr.position
+    ORDER BY c.game_type, tr.position
+  `;
+
   try {
     const gameTypes = await new Promise((resolve, reject) => {
       db.all(query1, [targetSeason], (err, rows) => err ? reject(err) : resolve(rows));
@@ -55,7 +66,11 @@ router.get('/debug/podiums', async (req, res) => {
       db.all(query2, [targetSeason], (err, rows) => err ? reject(err) : resolve(rows));
     });
 
-    res.json({ gameTypes, results, season: targetSeason });
+    const positionSamples = await new Promise((resolve, reject) => {
+      db.all(query3, [targetSeason], (err, rows) => err ? reject(err) : resolve(rows));
+    });
+
+    res.json({ gameTypes, results, positionSamples, season: targetSeason });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
