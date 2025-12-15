@@ -275,52 +275,40 @@ router.get('/players/active', authenticateToken, async (req, res) => {
   });
 });
 
-// Get players with most wins per game mode
+// Get players with most wins by category
 router.get('/players/wins', authenticateToken, async (req, res) => {
   const db = require('../db-loader');
-  const { season } = req.query;
+  const { season, category_id } = req.query;
   const targetSeason = season || getCurrentSeason();
 
-  const query = `
-    SELECT
-      tr.licence,
-      COALESCE(p.first_name || ' ' || p.last_name, tr.player_name) as player_name,
-      p.club,
-      c.game_type,
-      COUNT(*) as wins
-    FROM tournament_results tr
-    JOIN tournaments t ON tr.tournament_id = t.id
-    JOIN categories c ON t.category_id = c.id
-    LEFT JOIN players p ON REPLACE(tr.licence, ' ', '') = REPLACE(p.licence, ' ', '')
-    WHERE t.season = $1 AND tr.position = 1
-    GROUP BY tr.licence, COALESCE(p.first_name || ' ' || p.last_name, tr.player_name), p.club, c.game_type
-    ORDER BY c.game_type, wins DESC
-  `;
+  if (category_id) {
+    const query = `
+      SELECT
+        tr.licence,
+        COALESCE(p.first_name || ' ' || p.last_name, tr.player_name) as player_name,
+        p.club,
+        c.display_name as category,
+        COUNT(*) as wins
+      FROM tournament_results tr
+      JOIN tournaments t ON tr.tournament_id = t.id
+      JOIN categories c ON t.category_id = c.id
+      LEFT JOIN players p ON REPLACE(tr.licence, ' ', '') = REPLACE(p.licence, ' ', '')
+      WHERE t.season = $1 AND tr.position = 1 AND c.id = $2
+      GROUP BY tr.licence, COALESCE(p.first_name || ' ' || p.last_name, tr.player_name), p.club, c.display_name
+      ORDER BY wins DESC
+      LIMIT 10
+    `;
 
-  db.all(query, [targetSeason], (err, rows) => {
-    if (err) {
-      console.error('Error fetching player wins:', err);
-      return res.status(500).json({ error: err.message });
-    }
-
-    // Group by game_type and take top 5 per mode
-    const result = {};
-    (rows || []).forEach(row => {
-      if (!result[row.game_type]) {
-        result[row.game_type] = [];
+    db.all(query, [targetSeason, category_id], (err, rows) => {
+      if (err) {
+        console.error('Error fetching player wins:', err);
+        return res.status(500).json({ error: err.message });
       }
-      if (result[row.game_type].length < 5) {
-        result[row.game_type].push({
-          licence: row.licence,
-          player_name: row.player_name,
-          club: row.club,
-          wins: row.wins
-        });
-      }
+      res.json(rows || []);
     });
-
-    res.json(result);
-  });
+  } else {
+    res.json([]);
+  }
 });
 
 // Get players with best moyenne by category
