@@ -529,40 +529,49 @@
     }
 
     // Load tournois stats (current season only)
+    // Uses the tournaments table (played competitions) like the Statistics page
     async function loadTournoisStats() {
       try {
-        const response = await fetch(`${API_URL}/inscriptions/tournoi`, {
+        const currentSeason = getSeasonForDate(new Date());
+
+        // Use tournaments API (played competitions) instead of tournoi_ext (scheduled)
+        // This matches the Statistics page methodology
+        const response = await fetch(`${API_URL}/tournaments?season=${currentSeason}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        // Also load upcoming from tournoi_ext (scheduled competitions)
+        const tournoiResponse = await fetch(`${API_URL}/inscriptions/tournoi`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
         if (response.ok) {
-          const tournois = await response.json();
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
+          const tournaments = await response.json();
+          const pastSeason = tournaments.length; // All played tournaments for this season
 
-          // Current season stats - use getSeasonForTournoi to handle finals correctly
-          const currentSeason = getSeasonForDate(new Date());
-          const seasonTournois = tournois.filter(t => {
-            return getSeasonForTournoi(t) === currentSeason;
-          });
+          // Calculate upcoming from tournoi_ext (scheduled but not yet played)
+          let upcomingSeason = 0;
+          let totalScheduled = 0;
+          if (tournoiResponse.ok) {
+            const tournois = await tournoiResponse.json();
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
 
-          const totalSeason = seasonTournois.length;
-          const upcomingSeason = seasonTournois.filter(t => {
-            const debut = t.debut ? new Date(t.debut) : null;
-            return debut && debut >= today;
-          }).length;
-          const pastSeason = seasonTournois.filter(t => {
-            const debut = t.debut ? new Date(t.debut) : null;
-            return debut && debut < today;
-          }).length;
+            const seasonTournois = tournois.filter(t => getSeasonForTournoi(t) === currentSeason);
+            totalScheduled = seasonTournois.length;
+            upcomingSeason = seasonTournois.filter(t => {
+              const debut = t.debut ? new Date(t.debut) : null;
+              return debut && debut >= today;
+            }).length;
+          }
 
           // Update section title with season
           document.getElementById('tournoiSectionTitle').textContent = `Compétitions saison ${currentSeason}`;
 
           // Update values
-          document.getElementById('tournoiTotalSeason').textContent = totalSeason;
+          document.getElementById('tournoiTotalSeason').textContent = totalScheduled;
           document.getElementById('tournoiUpcomingSeason').textContent = upcomingSeason;
-          document.getElementById('tournoiPastSeason').textContent = pastSeason;
+          document.getElementById('tournoiPastSeason').textContent = pastSeason; // From tournaments table
         }
       } catch (error) {
         console.error('Error loading tournois stats:', error);
