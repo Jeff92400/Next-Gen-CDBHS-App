@@ -513,9 +513,14 @@
 
         <!-- New Players -->
         <div class="stats-section">
-          <h2 class="stats-section-title">🌟 Nouveaux Joueurs cette Saison</h2>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+            <h2 class="stats-section-title" style="margin-bottom: 0;">🌟 Nouveaux Joueurs</h2>
+            <select id="newPlayersSeasonSelect" class="form-select" style="min-width: 150px;">
+              <option value="">Chargement...</option>
+            </select>
+          </div>
           <div class="stats-card">
-            <div class="stats-card-header">Premiere participation en competition</div>
+            <div class="stats-card-header" id="newPlayersCardHeader">Premiere participation en competition</div>
             <div class="stats-card-body" id="newPlayersTable">
               <div class="loading">
                 <div class="loading-spinner"></div>
@@ -660,6 +665,13 @@
           select.innerHTML = seasons.map((s, i) =>
             `<option value="${s}" ${i === 0 ? 'selected' : ''}>${s}</option>`
           ).join('');
+
+          // Also populate new players season dropdown
+          const newPlayersSeasonSelect = document.getElementById('newPlayersSeasonSelect');
+          newPlayersSeasonSelect.innerHTML = seasons.map((s, i) =>
+            `<option value="${s}" ${i === 0 ? 'selected' : ''}>${s}</option>`
+          ).join('');
+
           currentSeason = seasons[0] || '';
           loadAllStats();
         }
@@ -681,6 +693,11 @@
 
     document.getElementById('serieCategorySelect').addEventListener('change', (e) => {
       loadPlayerSerie(e.target.value);
+    });
+
+    // New players season selector
+    document.getElementById('newPlayersSeasonSelect').addEventListener('change', (e) => {
+      loadNewPlayers(e.target.value);
     });
 
     // Load all statistics
@@ -1009,10 +1026,16 @@
     }
 
     // Load new players
-    async function loadNewPlayers() {
+    async function loadNewPlayers(season = null) {
       const container = document.getElementById('newPlayersTable');
+      const header = document.getElementById('newPlayersCardHeader');
+      const targetSeason = season || currentSeason;
+
+      header.textContent = `Premiere participation en ${targetSeason}`;
+      container.innerHTML = '<div class="loading"><div class="loading-spinner"></div></div>';
+
       try {
-        const response = await fetch(`${API_URL}/statistics/players/new?season=${currentSeason}`, {
+        const response = await fetch(`${API_URL}/statistics/players/new?season=${targetSeason}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -1020,7 +1043,7 @@
           const data = await response.json();
 
           if (data.length === 0) {
-            container.innerHTML = '<div class="empty-state">Aucun nouveau joueur cette saison</div>';
+            container.innerHTML = '<div class="empty-state">Aucun nouveau joueur pour cette saison</div>';
             return;
           }
 
@@ -1047,6 +1070,7 @@
         }
       } catch (error) {
         console.error('Error loading new players:', error);
+        container.innerHTML = '<div class="empty-state">Erreur de chargement</div>';
       }
     }
 
