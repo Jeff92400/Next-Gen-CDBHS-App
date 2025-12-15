@@ -39,6 +39,33 @@ router.get('/seasons', authenticateToken, async (req, res) => {
   );
 });
 
+// Get available categories for dropdowns
+router.get('/categories', authenticateToken, async (req, res) => {
+  const db = require('../db-loader');
+  const { season } = req.query;
+  const targetSeason = season || getCurrentSeason();
+
+  const query = `
+    SELECT DISTINCT
+      c.id,
+      c.display_name,
+      c.game_type,
+      c.level
+    FROM categories c
+    JOIN tournaments t ON t.category_id = c.id
+    WHERE t.season = $1
+    ORDER BY c.game_type, c.level
+  `;
+
+  db.all(query, [targetSeason], (err, rows) => {
+    if (err) {
+      console.error('Error fetching categories:', err);
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows || []);
+  });
+});
+
 // ==================== CLUB STATISTICS ====================
 
 // Get club rankings by wins (position = 1) per game mode
@@ -226,15 +253,16 @@ router.get('/players/active', authenticateToken, async (req, res) => {
       tr.licence,
       COALESCE(p.first_name || ' ' || p.last_name, tr.player_name) as player_name,
       p.club,
-      COUNT(*) as tournaments_played,
+      COUNT(DISTINCT t.id) as tournaments_played,
+      COUNT(*) as category_participations,
       COUNT(DISTINCT c.game_type) as game_types_played
     FROM tournament_results tr
     JOIN tournaments t ON tr.tournament_id = t.id
     JOIN categories c ON t.category_id = c.id
     LEFT JOIN players p ON REPLACE(tr.licence, ' ', '') = REPLACE(p.licence, ' ', '')
     WHERE t.season = $1
-    GROUP BY tr.licence, player_name, p.club
-    ORDER BY tournaments_played DESC
+    GROUP BY tr.licence, COALESCE(p.first_name || ' ' || p.last_name, tr.player_name), p.club
+    ORDER BY tournaments_played DESC, category_participations DESC
     LIMIT $2
   `;
 
@@ -265,7 +293,7 @@ router.get('/players/wins', authenticateToken, async (req, res) => {
     JOIN categories c ON t.category_id = c.id
     LEFT JOIN players p ON REPLACE(tr.licence, ' ', '') = REPLACE(p.licence, ' ', '')
     WHERE t.season = $1 AND tr.position = 1
-    GROUP BY tr.licence, player_name, p.club, c.game_type
+    GROUP BY tr.licence, COALESCE(p.first_name || ' ' || p.last_name, tr.player_name), p.club, c.game_type
     ORDER BY c.game_type, wins DESC
   `;
 
@@ -295,114 +323,109 @@ router.get('/players/wins', authenticateToken, async (req, res) => {
   });
 });
 
-// Get players with best moyenne per game mode
+// Get players with best moyenne by category
 router.get('/players/moyenne', authenticateToken, async (req, res) => {
   const db = require('../db-loader');
-  const { season } = req.query;
+  const { season, category_id } = req.query;
   const targetSeason = season || getCurrentSeason();
 
-  const query = `
-    SELECT
-      tr.licence,
-      COALESCE(p.first_name || ' ' || p.last_name, tr.player_name) as player_name,
-      p.club,
-      c.game_type,
-      AVG(tr.moyenne) as avg_moyenne,
-      MAX(tr.moyenne) as best_moyenne,
-      COUNT(*) as tournaments
-    FROM tournament_results tr
-    JOIN tournaments t ON tr.tournament_id = t.id
-    JOIN categories c ON t.category_id = c.id
-    LEFT JOIN players p ON REPLACE(tr.licence, ' ', '') = REPLACE(p.licence, ' ', '')
-    WHERE t.season = $1 AND tr.moyenne > 0
-    GROUP BY tr.licence, player_name, p.club, c.game_type
-    HAVING COUNT(*) >= 2
-    ORDER BY c.game_type, avg_moyenne DESC
-  `;
+  // If category_id is provided, filter by specific category
+  if (category_id) {
+    const query = `
+      SELECT
+        tr.licence,
+        COALESCE(p.first_name || ' ' || p.last_name, tr.player_name) as player_name,
+        p.club,
+        c.display_name as category,
+        AVG(tr.moyenne) as avg_moyenne,
+        MAX(tr.moyenne) as best_moyenne,
+        COUNT(*) as tournaments
+      FROM tournament_results tr
+      JOIN tournaments t ON tr.tournament_id = t.id
+      JOIN categories c ON t.category_id = c.id
+      LEFT JOIN players p ON REPLACE(tr.licence, ' ', '') = REPLACE(p.licence, ' ', '')
+      WHERE t.season = $1 AND tr.moyenne > 0 AND c.id = $2
+      GROUP BY tr.licence, COALESCE(p.first_name || ' ' || p.last_name, tr.player_name), p.club, c.display_name
+      ORDER BY avg_moyenne DESC
+      LIMIT 10
+    `;
 
-  db.all(query, [targetSeason], (err, rows) => {
-    if (err) {
-      console.error('Error fetching player moyenne:', err);
-      return res.status(500).json({ error: err.message });
-    }
-
-    // Group by game_type and take top 5 per mode
-    const result = {};
-    (rows || []).forEach(row => {
-      if (!result[row.game_type]) {
-        result[row.game_type] = [];
+    db.all(query, [targetSeason, category_id], (err, rows) => {
+      if (err) {
+        console.error('Error fetching player moyenne:', err);
+        return res.status(500).json({ error: err.message });
       }
-      if (result[row.game_type].length < 5) {
-        result[row.game_type].push({
-          licence: row.licence,
-          player_name: row.player_name,
-          club: row.club,
-          avg_moyenne: parseFloat(row.avg_moyenne.toFixed(3)),
-          best_moyenne: parseFloat(row.best_moyenne.toFixed(3)),
-          tournaments: row.tournaments
-        });
-      }
+      res.json((rows || []).map(row => ({
+        licence: row.licence,
+        player_name: row.player_name,
+        club: row.club,
+        category: row.category,
+        avg_moyenne: parseFloat(row.avg_moyenne.toFixed(3)),
+        best_moyenne: parseFloat(row.best_moyenne.toFixed(3)),
+        tournaments: row.tournaments
+      })));
     });
-
-    res.json(result);
-  });
+  } else {
+    // Return empty if no category selected
+    res.json([]);
+  }
 });
 
-// Get players with best serie per game mode
+// Get players with best serie by category
 router.get('/players/serie', authenticateToken, async (req, res) => {
   const db = require('../db-loader');
-  const { season } = req.query;
+  const { season, category_id } = req.query;
   const targetSeason = season || getCurrentSeason();
 
-  const query = `
-    SELECT
-      tr.licence,
-      COALESCE(p.first_name || ' ' || p.last_name, tr.player_name) as player_name,
-      p.club,
-      c.game_type,
-      c.level,
-      MAX(tr.serie) as best_serie,
-      t.tournament_number,
-      t.tournament_date
-    FROM tournament_results tr
-    JOIN tournaments t ON tr.tournament_id = t.id
-    JOIN categories c ON t.category_id = c.id
-    LEFT JOIN players p ON REPLACE(tr.licence, ' ', '') = REPLACE(p.licence, ' ', '')
-    WHERE t.season = $1 AND tr.serie > 0
-    GROUP BY tr.licence, player_name, p.club, c.game_type, c.level, t.tournament_number, t.tournament_date
-    ORDER BY c.game_type, best_serie DESC
-  `;
+  // If category_id is provided, filter by specific category
+  if (category_id) {
+    const query = `
+      SELECT
+        tr.licence,
+        COALESCE(p.first_name || ' ' || p.last_name, tr.player_name) as player_name,
+        p.club,
+        c.display_name as category,
+        MAX(tr.serie) as best_serie,
+        t.tournament_number
+      FROM tournament_results tr
+      JOIN tournaments t ON tr.tournament_id = t.id
+      JOIN categories c ON t.category_id = c.id
+      LEFT JOIN players p ON REPLACE(tr.licence, ' ', '') = REPLACE(p.licence, ' ', '')
+      WHERE t.season = $1 AND tr.serie > 0 AND c.id = $2
+      GROUP BY tr.licence, COALESCE(p.first_name || ' ' || p.last_name, tr.player_name), p.club, c.display_name, t.tournament_number
+      ORDER BY best_serie DESC
+      LIMIT 10
+    `;
 
-  db.all(query, [targetSeason], (err, rows) => {
-    if (err) {
-      console.error('Error fetching player serie:', err);
-      return res.status(500).json({ error: err.message });
-    }
+    db.all(query, [targetSeason, category_id], (err, rows) => {
+      if (err) {
+        console.error('Error fetching player serie:', err);
+        return res.status(500).json({ error: err.message });
+      }
 
-    // Group by game_type and take top 5 per mode (best unique series)
-    const result = {};
-    const seen = {};
-    (rows || []).forEach(row => {
-      if (!result[row.game_type]) {
-        result[row.game_type] = [];
-        seen[row.game_type] = new Set();
-      }
-      // Only add if we haven't seen this player yet for this game type
-      if (!seen[row.game_type].has(row.licence) && result[row.game_type].length < 5) {
-        seen[row.game_type].add(row.licence);
-        result[row.game_type].push({
-          licence: row.licence,
-          player_name: row.player_name,
-          club: row.club,
-          best_serie: row.best_serie,
-          category: row.level,
-          tournament: `T${row.tournament_number}`
-        });
-      }
+      // Remove duplicates (keep best serie per player)
+      const seen = new Set();
+      const result = [];
+      (rows || []).forEach(row => {
+        if (!seen.has(row.licence)) {
+          seen.add(row.licence);
+          result.push({
+            licence: row.licence,
+            player_name: row.player_name,
+            club: row.club,
+            category: row.category,
+            best_serie: row.best_serie,
+            tournament: `T${row.tournament_number}`
+          });
+        }
+      });
+
+      res.json(result);
     });
-
-    res.json(result);
-  });
+  } else {
+    // Return empty if no category selected
+    res.json([]);
+  }
 });
 
 // Get most consistent players (played all 3 tournaments in a category)
@@ -425,7 +448,7 @@ router.get('/players/consistent', authenticateToken, async (req, res) => {
     JOIN categories c ON t.category_id = c.id
     LEFT JOIN players p ON REPLACE(tr.licence, ' ', '') = REPLACE(p.licence, ' ', '')
     WHERE t.season = $1
-    GROUP BY tr.licence, player_name, p.club, c.id, c.display_name, c.game_type
+    GROUP BY tr.licence, COALESCE(p.first_name || ' ' || p.last_name, tr.player_name), p.club, c.id, c.display_name, c.game_type
     HAVING COUNT(DISTINCT t.tournament_number) = 3
     ORDER BY avg_position ASC
   `;
@@ -615,12 +638,6 @@ router.get('/summary', authenticateToken, async (req, res) => {
     totalParticipations: `
       SELECT COUNT(*) as count FROM tournament_results tr
       JOIN tournaments t ON tr.tournament_id = t.id WHERE t.season = $1
-    `,
-    totalClubs: `
-      SELECT COUNT(DISTINCT p.club) as count FROM tournament_results tr
-      JOIN tournaments t ON tr.tournament_id = t.id
-      JOIN players p ON REPLACE(tr.licence, ' ', '') = REPLACE(p.licence, ' ', '')
-      WHERE t.season = $1 AND p.club IS NOT NULL AND p.club != ''
     `
   };
 
@@ -669,7 +686,7 @@ router.get('/players/new', authenticateToken, async (req, res) => {
     JOIN first_appearance fa ON tr.licence = fa.licence
     LEFT JOIN players p ON REPLACE(tr.licence, ' ', '') = REPLACE(p.licence, ' ', '')
     WHERE t.season = $1 AND fa.first_season = $1
-    GROUP BY tr.licence, player_name, p.club
+    GROUP BY tr.licence, COALESCE(p.first_name || ' ' || p.last_name, tr.player_name), p.club
     ORDER BY tournaments_played DESC
     LIMIT 20
   `;
