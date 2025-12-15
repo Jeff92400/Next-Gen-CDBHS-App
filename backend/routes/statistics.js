@@ -76,16 +76,25 @@ router.get('/debug/podiums', async (req, res) => {
     ORDER BY c.game_type
   `;
 
-  // Third query: list all tournaments with their details
+  // Third query: show raw podium data per game type to verify totals
   const query3 = `
-    SELECT t.id, t.tournament_number, t.season, t.tournament_date, c.game_type, c.display_name,
-           COUNT(tr.id) as result_count
-    FROM tournaments t
+    SELECT
+      c.game_type,
+      COALESCE(ca.canonical_name, p.club, 'Non renseigné') as club,
+      SUM(CASE WHEN tr.position = 1 THEN 1 ELSE 0 END) as gold,
+      SUM(CASE WHEN tr.position = 2 THEN 1 ELSE 0 END) as silver,
+      SUM(CASE WHEN tr.position = 3 THEN 1 ELSE 0 END) as bronze,
+      SUM(CASE WHEN tr.position IN (1, 2, 3) THEN 1 ELSE 0 END) as total
+    FROM tournament_results tr
+    JOIN tournaments t ON tr.tournament_id = t.id
     JOIN categories c ON t.category_id = c.id
-    LEFT JOIN tournament_results tr ON tr.tournament_id = t.id
+    LEFT JOIN players p ON REPLACE(tr.licence, ' ', '') = REPLACE(p.licence, ' ', '')
+    LEFT JOIN club_aliases ca ON UPPER(REPLACE(REPLACE(REPLACE(COALESCE(p.club, ''), ' ', ''), '.', ''), '-', ''))
+                                = UPPER(REPLACE(REPLACE(REPLACE(ca.alias, ' ', ''), '.', ''), '-', ''))
     WHERE t.season = $1
-    GROUP BY t.id, t.tournament_number, t.season, t.tournament_date, c.game_type, c.display_name
-    ORDER BY c.game_type, t.tournament_number
+      AND tr.position IN (1, 2, 3)
+    GROUP BY c.game_type, COALESCE(ca.canonical_name, p.club, 'Non renseigné')
+    ORDER BY c.game_type, total DESC
   `;
 
   try {
@@ -97,11 +106,20 @@ router.get('/debug/podiums', async (req, res) => {
       db.all(query2, [targetSeason], (err, rows) => err ? reject(err) : resolve(rows));
     });
 
-    const tournaments = await new Promise((resolve, reject) => {
+    const clubPodiums = await new Promise((resolve, reject) => {
       db.all(query3, [targetSeason], (err, rows) => err ? reject(err) : resolve(rows));
     });
 
-    res.json({ gameTypes, results, tournaments, season: targetSeason });
+    // Calculate totals per game type
+    const totalsPerGameType = {};
+    clubPodiums.forEach(row => {
+      if (!totalsPerGameType[row.game_type]) {
+        totalsPerGameType[row.game_type] = 0;
+      }
+      totalsPerGameType[row.game_type] += parseInt(row.total) || 0;
+    });
+
+    res.json({ gameTypes, results, clubPodiums, totalsPerGameType, season: targetSeason });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
