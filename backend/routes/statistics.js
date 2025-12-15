@@ -16,35 +16,49 @@ function getCurrentSeason() {
   }
 }
 
-// DEBUG: Check podiums data by game type
-router.get('/debug/podiums', authenticateToken, async (req, res) => {
+// DEBUG: Check podiums data by game type (NO AUTH for testing)
+router.get('/debug/podiums', async (req, res) => {
   const db = require('../db-loader');
   const { season } = req.query;
   const targetSeason = season || getCurrentSeason();
 
-  const query = `
-    SELECT
-      c.game_type,
-      COUNT(*) as total_results,
-      SUM(CASE WHEN tr.position IS NOT NULL THEN 1 ELSE 0 END) as with_position,
-      SUM(CASE WHEN CAST(tr.position AS INTEGER) IN (1, 2, 3) THEN 1 ELSE 0 END) as podium_positions,
-      SUM(CASE WHEN p.licence IS NOT NULL THEN 1 ELSE 0 END) as matched_players,
-      SUM(CASE WHEN p.club IS NOT NULL AND p.club != '' THEN 1 ELSE 0 END) as with_club
-    FROM tournament_results tr
-    JOIN tournaments t ON tr.tournament_id = t.id
+  // First query: what game types exist in tournaments
+  const query1 = `
+    SELECT DISTINCT c.game_type, COUNT(DISTINCT t.id) as tournament_count
+    FROM tournaments t
     JOIN categories c ON t.category_id = c.id
-    LEFT JOIN players p ON REPLACE(tr.licence, ' ', '') = REPLACE(p.licence, ' ', '')
     WHERE t.season = $1
     GROUP BY c.game_type
     ORDER BY c.game_type
   `;
 
-  db.all(query, [targetSeason], (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    res.json(rows);
-  });
+  // Second query: what results exist with positions
+  const query2 = `
+    SELECT
+      c.game_type,
+      COUNT(*) as total_results,
+      SUM(CASE WHEN tr.position IN (1, 2, 3) THEN 1 ELSE 0 END) as podium_positions
+    FROM tournament_results tr
+    JOIN tournaments t ON tr.tournament_id = t.id
+    JOIN categories c ON t.category_id = c.id
+    WHERE t.season = $1
+    GROUP BY c.game_type
+    ORDER BY c.game_type
+  `;
+
+  try {
+    const gameTypes = await new Promise((resolve, reject) => {
+      db.all(query1, [targetSeason], (err, rows) => err ? reject(err) : resolve(rows));
+    });
+
+    const results = await new Promise((resolve, reject) => {
+      db.all(query2, [targetSeason], (err, rows) => err ? reject(err) : resolve(rows));
+    });
+
+    res.json({ gameTypes, results, season: targetSeason });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get available seasons
