@@ -120,7 +120,7 @@ router.get('/clubs/podiums', authenticateToken, async (req, res) => {
 
   const query = `
     SELECT
-      p.club,
+      COALESCE(ca.canonical_name, p.club) as club,
       c.game_type,
       COUNT(*) as podiums,
       SUM(CASE WHEN CAST(tr.position AS INTEGER) = 1 THEN 1 ELSE 0 END) as gold,
@@ -130,10 +130,12 @@ router.get('/clubs/podiums', authenticateToken, async (req, res) => {
     JOIN tournaments t ON tr.tournament_id = t.id
     JOIN categories c ON t.category_id = c.id
     JOIN players p ON REPLACE(tr.licence, ' ', '') = REPLACE(p.licence, ' ', '')
+    LEFT JOIN club_aliases ca ON UPPER(REPLACE(REPLACE(REPLACE(p.club, ' ', ''), '.', ''), '-', ''))
+                                = UPPER(REPLACE(REPLACE(REPLACE(ca.alias, ' ', ''), '.', ''), '-', ''))
     WHERE t.season = $1
       AND CAST(tr.position AS INTEGER) <= 3
       AND p.club IS NOT NULL AND p.club != ''
-    GROUP BY p.club, c.game_type
+    GROUP BY COALESCE(ca.canonical_name, p.club), c.game_type
     ORDER BY c.game_type, podiums DESC
   `;
 
@@ -170,15 +172,17 @@ router.get('/clubs/participations', authenticateToken, async (req, res) => {
 
   const query = `
     SELECT
-      p.club,
+      COALESCE(ca.canonical_name, p.club) as club,
       COUNT(DISTINCT tr.licence) as unique_players,
       COUNT(*) as total_participations
     FROM tournament_results tr
     JOIN tournaments t ON tr.tournament_id = t.id
     JOIN players p ON REPLACE(tr.licence, ' ', '') = REPLACE(p.licence, ' ', '')
+    LEFT JOIN club_aliases ca ON UPPER(REPLACE(REPLACE(REPLACE(p.club, ' ', ''), '.', ''), '-', ''))
+                                = UPPER(REPLACE(REPLACE(REPLACE(ca.alias, ' ', ''), '.', ''), '-', ''))
     WHERE t.season = $1
       AND p.club IS NOT NULL AND p.club != ''
-    GROUP BY p.club
+    GROUP BY COALESCE(ca.canonical_name, p.club)
     ORDER BY total_participations DESC
     LIMIT 10
   `;
