@@ -16,6 +16,30 @@ function getCurrentSeason() {
   }
 }
 
+// FIX: Add missing club alias for Courbevoie
+router.post('/fix/club-alias', async (req, res) => {
+  const db = require('../db-loader');
+
+  const insertQuery = `
+    INSERT INTO club_aliases (alias, canonical_name)
+    VALUES ('A. DE BILLARD COURBEVOIE-LA DEFENSE', 'A DE BILLARD COURBEVOIE LA DEFENSE')
+    ON CONFLICT DO NOTHING
+  `;
+
+  try {
+    await new Promise((resolve, reject) => {
+      db.run(insertQuery, [], function(err) {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    res.json({ success: true, message: 'Club alias added' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // FIX: Update position field for all tournament results based on match_points ranking
 router.post('/fix/positions', async (req, res) => {
   const db = require('../db-loader');
