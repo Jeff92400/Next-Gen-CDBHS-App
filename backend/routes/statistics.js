@@ -16,6 +16,37 @@ function getCurrentSeason() {
   }
 }
 
+// DEBUG: Check podiums data by game type
+router.get('/debug/podiums', authenticateToken, async (req, res) => {
+  const db = require('../db-loader');
+  const { season } = req.query;
+  const targetSeason = season || getCurrentSeason();
+
+  const query = `
+    SELECT
+      c.game_type,
+      COUNT(*) as total_results,
+      SUM(CASE WHEN tr.position IS NOT NULL THEN 1 ELSE 0 END) as with_position,
+      SUM(CASE WHEN CAST(tr.position AS INTEGER) IN (1, 2, 3) THEN 1 ELSE 0 END) as podium_positions,
+      SUM(CASE WHEN p.licence IS NOT NULL THEN 1 ELSE 0 END) as matched_players,
+      SUM(CASE WHEN p.club IS NOT NULL AND p.club != '' THEN 1 ELSE 0 END) as with_club
+    FROM tournament_results tr
+    JOIN tournaments t ON tr.tournament_id = t.id
+    JOIN categories c ON t.category_id = c.id
+    LEFT JOIN players p ON REPLACE(tr.licence, ' ', '') = REPLACE(p.licence, ' ', '')
+    WHERE t.season = $1
+    GROUP BY c.game_type
+    ORDER BY c.game_type
+  `;
+
+  db.all(query, [targetSeason], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(rows);
+  });
+});
+
 // Get available seasons
 router.get('/seasons', authenticateToken, async (req, res) => {
   const db = require('../db-loader');
